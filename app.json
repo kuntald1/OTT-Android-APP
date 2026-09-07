@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "theomy",
+    "slug": "theomy-mobile",
+    "scheme": "theomy",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/app-icon.png",
+    "backgroundColor": "#5E0018",
+    "splash": {
+      "image": "./assets/app-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#5E0018"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.theomy.app"
+    },
+    "android": {
+      "package": "com.theomy.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/app-icon.png",
+        "backgroundColor": "#5E0018"
+      },
+      "permissions": []
+    },
+    "plugins": [
+      [
+        "react-native-video",
+        {
+          "androidExtensions": {
+            "useExoplayerHls": true,
+            "useExoplayerIMA": true
+          }
+        }
+      ],
+      "expo-image"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e0d09356-971b-40d0-8c91-8bcb0cefb8f7"
+      }
+    }
+  }
+}

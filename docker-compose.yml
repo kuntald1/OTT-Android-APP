@@ -1,0 +1,26 @@
+services:
+  theomy-mobile:
+    build: .
+    ports:
+      - "8081:8081"
+      - "19000:19000"
+      - "19001:19001"
+      - "19002:19002"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      # Skips interactive prompts (e.g. ngrok install confirmation).
+      - CI=1
+      # Tunnel mode works from inside Docker Desktop on Windows without any
+      # LAN/firewall setup — the QR code in the terminal will point at an
+      # expo.dev tunnel URL your phone can reach over the internet.
+      #
+      # If you'd rather use LAN mode (faster, no internet round-trip),
+      # comment out `--tunnel` in the Dockerfile's CMD (or override `command:`
+      # below) and instead set REACT_NATIVE_PACKAGER_HOSTNAME to your PC's
+      # LAN IP (ipconfig -> IPv4 Address), then run with `--lan`. Phone and
+      # PC must be on the same WiFi for that mode.
+      - REACT_NATIVE_PACKAGER_HOSTNAME=${REACT_NATIVE_PACKAGER_HOSTNAME:-}
+    stdin_open: true
+    tty: true

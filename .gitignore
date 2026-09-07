@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native build folders
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+ios/Pods/
+ios/build/
+ios/DerivedData/
+
+# Native — auto-generated, safe to regenerate via prebuild
+# (leave these commented out if you edit native files by hand instead)
+# android/
+# ios/
+
+# Signing / secrets
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+.env
+.env.local
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Metro
+.metro-health-check*
