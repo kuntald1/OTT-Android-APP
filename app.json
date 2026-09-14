@@ -43,11 +43,18 @@
       [
         "react-native-share",
         {
-          "ios": ["fb", "instagram"],
-          "android": ["com.facebook.katana", "com.instagram.android"],
+          "ios": [
+            "fb",
+            "instagram"
+          ],
+          "android": [
+            "com.facebook.katana",
+            "com.instagram.android"
+          ],
           "enableBase64ShareAndroid": true
         }
-      ]
+      ],
+      "expo-build-properties"
     ],
     "extra": {
       "eas": {

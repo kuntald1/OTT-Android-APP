@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
   ScrollView,
-  Share,
+  Share as RNShare,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import ShareLib from "react-native-share";
+import * as FileSystem from "expo-file-system";
 import { useRoute } from "@react-navigation/native";
 import {
   deleteBlogComment,
@@ -27,11 +30,16 @@ import { resolveMediaUrl } from "@/api/apiClient";
 import { useAuth } from "@/context/AuthContext";
 import { COLORS } from "@/theme/colors";
 
+// TODO: replace with the real App ID from developers.facebook.com (My Apps
+// → your app → Settings → Basic). Required by Meta since Jan 2023 for any
+// app sharing to Instagram/Facebook Stories — sharing will fail with a
+// placeholder value.
+const FACEBOOK_APP_ID = "1930011521292076";
+
 export default function BlogDetailScreen() {
   const route = useRoute<any>();
   const blogId: string = route.params.blogId;
   const { user } = useAuth();
-
   const [blog, setBlog] = useState<BlogDetail | null>(null);
   const [comments, setComments] = useState<BlogComment[]>([]);
   const [liked, setLiked] = useState(false);
@@ -114,18 +122,77 @@ export default function BlogDetailScreen() {
     Linking.openURL(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`);
   };
 
-  // Instagram has no URL scheme for pre-filled content sharing (no
-  // official public API for it) — this opens the app itself so the person
-  // can share manually; the generic Share button below is the reliable
-  // one for actually sending the link.
-  const shareToInstagram = () => {
-    Linking.openURL("instagram://app").catch(() => {
-      Linking.openURL("https://www.instagram.com/");
-    });
+  // Downloads the remote cover image to a local file, then reads it as
+  // base64 — required for react-native-share's Stories sharing on Android
+  // when enableBase64ShareAndroid is set (a plain file:// path silently
+  // fails to launch the Stories composer, per multiple real-world reports
+  // for this exact library).
+  const getLocalCoverImage = async (): Promise<string | null> => {
+    const remoteUrl = blog?.cover_image_url ? resolveMediaUrl(blog.cover_image_url) : null;
+    if (!remoteUrl) return null;
+    try {
+      const localPath = `${FileSystem.cacheDirectory}blog-cover-${blogId}.jpg`;
+      await FileSystem.downloadAsync(remoteUrl, localPath);
+      const base64 = await FileSystem.readAsStringAsync(localPath, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return Platform.OS === "android" ? `data:image/jpeg;base64,${base64}` : localPath;
+    } catch {
+      return null;
+    }
+  };
+
+  const shareToFacebookStory = async () => {
+    const backgroundImage = await getLocalCoverImage();
+    if (!backgroundImage) {
+      shareToFacebook();
+      return;
+    }
+    try {
+      const result = await ShareLib.shareSingle({
+        appId: FACEBOOK_APP_ID,
+        backgroundImage,
+        backgroundTopColor: "#5E0018",
+        backgroundBottomColor: "#241014",
+        social: ShareLib.Social.FACEBOOK_STORIES,
+      } as any);
+      if (result && (result as any).success === false) {
+        Alert.alert("Facebook Story sharing didn't complete", JSON.stringify(result));
+      }
+    } catch (err: any) {
+      Alert.alert("Facebook Story sharing failed", JSON.stringify(err?.message || err));
+      shareToFacebook();
+    }
+  };
+
+  // Instagram has no URL scheme for pre-filled feed/link sharing, but
+  // Stories sharing (with a background image) IS an officially supported
+  // Meta feature via react-native-share, using the same Facebook App ID.
+  const shareToInstagramStory = async () => {
+    const backgroundImage = await getLocalCoverImage();
+    if (!backgroundImage) {
+      Linking.openURL("instagram://app").catch(() => Linking.openURL("https://www.instagram.com/"));
+      return;
+    }
+    try {
+      const result = await ShareLib.shareSingle({
+        appId: FACEBOOK_APP_ID,
+        backgroundImage,
+        backgroundTopColor: "#5E0018",
+        backgroundBottomColor: "#241014",
+        social: ShareLib.Social.INSTAGRAM_STORIES,
+      } as any);
+      if (result && (result as any).success === false) {
+        Alert.alert("Instagram Story sharing didn't complete", JSON.stringify(result));
+      }
+    } catch (err: any) {
+      Alert.alert("Instagram Story sharing failed", JSON.stringify(err?.message || err));
+      Linking.openURL("instagram://app").catch(() => Linking.openURL("https://www.instagram.com/"));
+    }
   };
 
   const shareGeneric = () => {
-    Share.share({ message: shareMessage, url: shareUrl, title: blog?.title });
+    RNShare.share({ message: shareMessage, url: shareUrl, title: blog?.title });
   };
 
   if (loading) {
@@ -174,10 +241,10 @@ export default function BlogDetailScreen() {
             <TouchableOpacity style={[styles.shareButton, styles.shareWhatsApp]} onPress={shareToWhatsApp}>
               <Text style={styles.shareButtonText}>WhatsApp</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.shareButton, styles.shareFacebook]} onPress={shareToFacebook}>
+            <TouchableOpacity style={[styles.shareButton, styles.shareFacebook]} onPress={shareToFacebookStory}>
               <Text style={styles.shareButtonText}>Facebook</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.shareButton, styles.shareInstagram]} onPress={shareToInstagram}>
+            <TouchableOpacity style={[styles.shareButton, styles.shareInstagram]} onPress={shareToInstagramStory}>
               <Text style={styles.shareButtonText}>Instagram</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.shareButton, styles.shareGeneric]} onPress={shareGeneric}>
