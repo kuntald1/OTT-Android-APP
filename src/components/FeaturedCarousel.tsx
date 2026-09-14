@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import RNVideo from "react-native-video";
 import { resolveMediaUrl } from "@/api/apiClient";
 import { Video } from "@/types";
@@ -35,6 +36,10 @@ export default function FeaturedCarousel({
   // keeps focus" behavior from the reference spec, and avoiding the cost of
   // running several video players at once.
   const [activeIndex, setActiveIndex] = useState(0);
+  // One mute toggle for the carousel (only the active card ever plays audio
+  // at a time, so a single flag is enough) — starts unmuted to match the
+  // existing autoplay behavior, user can tap to mute.
+  const [muted, setMuted] = useState(false);
 
   const handleScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / STEP);
@@ -66,10 +71,20 @@ export default function FeaturedCarousel({
             <View style={styles.card}>
               {isActive && video.trailer_playback_url ? (
                 <RNVideo
-                  source={{ uri: video.trailer_playback_url }}
+                  source={{
+                    uri: video.trailer_playback_url,
+                    // Bunny Stream (vz-*.b-cdn.net) rejects requests without
+                    // these headers — same fix already confirmed working in
+                    // VideoPlayerScreen. Without them the video silently
+                    // fails to decode, rendering as a plain black box.
+                    headers: {
+                      Referer: "https://movixa.duckdns.org/",
+                      Origin: "https://movixa.duckdns.org",
+                    },
+                  }}
                   style={StyleSheet.absoluteFill}
                   resizeMode="cover"
-                  muted={false}
+                  muted={muted}
                   repeat
                   paused={false}
                 />
@@ -95,6 +110,20 @@ export default function FeaturedCarousel({
               <View style={styles.hdBadge}>
                 <Text style={styles.hdBadgeText}>HD</Text>
               </View>
+
+              {isActive && video.trailer_playback_url && (
+                <TouchableOpacity
+                  style={styles.muteButton}
+                  onPress={() => setMuted((m) => !m)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name={muted ? "volume-mute" : "volume-high"}
+                    size={16}
+                    color={COLORS.cream}
+                  />
+                </TouchableOpacity>
+              )}
 
               <View style={styles.info}>
                 <Text style={styles.title} numberOfLines={2}>
@@ -170,6 +199,17 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   hdBadgeText: { ...TYPE.overline, color: COLORS.cream },
+  muteButton: {
+    position: "absolute",
+    top: SPACING.lg + 28,
+    right: SPACING.lg,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   info: { padding: SPACING.lg },
   title: { ...TYPE.title, fontSize: 24, color: COLORS.cream },
   subtitle: { ...TYPE.caption, color: COLORS.textMuted, marginTop: 3, marginBottom: SPACING.md },

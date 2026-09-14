@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import ShareLib from "react-native-share";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { useRoute } from "@react-navigation/native";
 import {
   deleteBlogComment,
@@ -127,31 +127,35 @@ export default function BlogDetailScreen() {
   // when enableBase64ShareAndroid is set (a plain file:// path silently
   // fails to launch the Stories composer, per multiple real-world reports
   // for this exact library).
-  const getLocalCoverImage = async (): Promise<string | null> => {
+  const getLocalCoverImage = async (): Promise<{ uri: string } | { error: string }> => {
     const remoteUrl = blog?.cover_image_url ? resolveMediaUrl(blog.cover_image_url) : null;
-    if (!remoteUrl) return null;
+    if (!remoteUrl) return { error: "This post has no cover_image_url set." };
     try {
       const localPath = `${FileSystem.cacheDirectory}blog-cover-${blogId}.jpg`;
-      await FileSystem.downloadAsync(remoteUrl, localPath);
+      const downloadResult = await FileSystem.downloadAsync(remoteUrl, localPath);
+      if (downloadResult.status !== 200) {
+        return { error: `Cover image download returned HTTP ${downloadResult.status} for ${remoteUrl}` };
+      }
       const base64 = await FileSystem.readAsStringAsync(localPath, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      return Platform.OS === "android" ? `data:image/jpeg;base64,${base64}` : localPath;
-    } catch {
-      return null;
+      return { uri: Platform.OS === "android" ? `data:image/jpeg;base64,${base64}` : localPath };
+    } catch (err: any) {
+      return { error: `${err?.message || err} (url: ${remoteUrl})` };
     }
   };
 
   const shareToFacebookStory = async () => {
-    const backgroundImage = await getLocalCoverImage();
-    if (!backgroundImage) {
+    const cover = await getLocalCoverImage();
+    if ("error" in cover) {
+      Alert.alert("Couldn't prepare cover image", `${cover.error} — falling back to a normal Facebook post.`);
       shareToFacebook();
       return;
     }
     try {
       const result = await ShareLib.shareSingle({
         appId: FACEBOOK_APP_ID,
-        backgroundImage,
+        backgroundImage: cover.uri,
         backgroundTopColor: "#5E0018",
         backgroundBottomColor: "#241014",
         social: ShareLib.Social.FACEBOOK_STORIES,
@@ -169,15 +173,16 @@ export default function BlogDetailScreen() {
   // Stories sharing (with a background image) IS an officially supported
   // Meta feature via react-native-share, using the same Facebook App ID.
   const shareToInstagramStory = async () => {
-    const backgroundImage = await getLocalCoverImage();
-    if (!backgroundImage) {
+    const cover = await getLocalCoverImage();
+    if ("error" in cover) {
+      Alert.alert("Couldn't prepare cover image", `${cover.error} — opening Instagram normally instead.`);
       Linking.openURL("instagram://app").catch(() => Linking.openURL("https://www.instagram.com/"));
       return;
     }
     try {
       const result = await ShareLib.shareSingle({
         appId: FACEBOOK_APP_ID,
-        backgroundImage,
+        backgroundImage: cover.uri,
         backgroundTopColor: "#5E0018",
         backgroundBottomColor: "#241014",
         social: ShareLib.Social.INSTAGRAM_STORIES,

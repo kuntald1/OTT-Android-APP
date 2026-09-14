@@ -141,7 +141,9 @@ export default function ArchiveScreen() {
   return (
     <GradientBackground
       style={styles.screen}
-      colors={[COLORS.archiveBackground, COLORS.archiveMid, COLORS.archiveDark]}
+      colors={["#5C3612", COLORS.archiveBackground, "#3D2410", COLORS.archiveMid, COLORS.archiveDark]}
+      locations={[0, 0.2, 0.45, 0.7, 1]}
+      glowColors={["rgba(212,162,68,0.14)", "rgba(212,162,68,0.22)"]}
     >
       <AppHeader activeRoute="Archive" onSearch={setQuery} showSwitcher />
 

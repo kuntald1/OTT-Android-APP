@@ -152,7 +152,16 @@ export default function VideoDetailScreen() {
           // wired to playback-session/heartbeat/progress, so trailer time
           // never counts toward paid watch-minutes.
           <RNVideo
-            source={{ uri: video.trailer_playback_url }}
+            source={{
+              uri: video.trailer_playback_url,
+              // Same Bunny Stream Referer/Origin requirement as
+              // VideoPlayerScreen — without these the trailer silently
+              // fails and renders as a black box instead of erroring.
+              headers: {
+                Referer: "https://movixa.duckdns.org/",
+                Origin: "https://movixa.duckdns.org",
+              },
+            }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
             muted={false}
