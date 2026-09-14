@@ -3,8 +3,10 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -95,6 +97,37 @@ export default function BlogDetailScreen() {
     }
   };
 
+  // Confirmed working web URL pattern for a blog post (movixa.duckdns.org/blog/{id}).
+  const shareUrl = `https://movixa.duckdns.org/blog/${blogId}`;
+  const shareMessage = blog ? `${blog.title} — ${shareUrl}` : shareUrl;
+
+  // These open the respective app directly with the content pre-filled —
+  // they don't touch any "post" endpoint in this app, just hand off to the
+  // OS/other app to share externally.
+  const shareToWhatsApp = () => {
+    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(shareMessage)}`).catch(() => {
+      Linking.openURL(`https://wa.me/?text=${encodeURIComponent(shareMessage)}`);
+    });
+  };
+
+  const shareToFacebook = () => {
+    Linking.openURL(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`);
+  };
+
+  // Instagram has no URL scheme for pre-filled content sharing (no
+  // official public API for it) — this opens the app itself so the person
+  // can share manually; the generic Share button below is the reliable
+  // one for actually sending the link.
+  const shareToInstagram = () => {
+    Linking.openURL("instagram://app").catch(() => {
+      Linking.openURL("https://www.instagram.com/");
+    });
+  };
+
+  const shareGeneric = () => {
+    Share.share({ message: shareMessage, url: shareUrl, title: blog?.title });
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -135,6 +168,22 @@ export default function BlogDetailScreen() {
               👍 {likesCount}
             </Text>
           </TouchableOpacity>
+
+          <View style={styles.shareRow}>
+            <Text style={styles.shareLabel}>Share:</Text>
+            <TouchableOpacity style={[styles.shareButton, styles.shareWhatsApp]} onPress={shareToWhatsApp}>
+              <Text style={styles.shareButtonText}>WhatsApp</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.shareButton, styles.shareFacebook]} onPress={shareToFacebook}>
+              <Text style={styles.shareButtonText}>Facebook</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.shareButton, styles.shareInstagram]} onPress={shareToInstagram}>
+              <Text style={styles.shareButtonText}>Instagram</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.shareButton, styles.shareGeneric]} onPress={shareGeneric}>
+              <Text style={styles.shareButtonText}>Share...</Text>
+            </TouchableOpacity>
+          </View>
 
           <Text style={styles.body}>{blog.body}</Text>
 
@@ -210,6 +259,14 @@ const styles = StyleSheet.create({
   },
   likeButtonText: { color: COLORS.cream, fontSize: 13 },
   likeButtonTextActive: { color: COLORS.gold, fontWeight: "700" },
+  shareRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 14 },
+  shareLabel: { color: COLORS.cream, opacity: 0.6, fontSize: 12 },
+  shareButton: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
+  shareButtonText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  shareWhatsApp: { backgroundColor: "#25D366" },
+  shareFacebook: { backgroundColor: "#1877F2" },
+  shareInstagram: { backgroundColor: "#C13584" },
+  shareGeneric: { backgroundColor: "rgba(255,255,255,0.15)" },
   body: { color: COLORS.cream, opacity: 0.9, fontSize: 15, lineHeight: 22, marginTop: 16 },
   commentsSection: { marginTop: 28 },
   sectionHeading: { color: COLORS.cream, fontSize: 15, fontWeight: "700", marginBottom: 12 },

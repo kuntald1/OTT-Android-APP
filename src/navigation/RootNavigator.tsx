@@ -14,6 +14,7 @@ import TicketDetailScreen from "@/screens/TicketDetailScreen";
 import BlogDetailScreen from "@/screens/BlogDetailScreen";
 import VideoDetailScreen from "@/screens/VideoDetailScreen";
 import FilteredVideosScreen from "@/screens/FilteredVideosScreen";
+import StudioProfileScreen from "@/screens/StudioProfileScreen";
 import VideoPlayerScreen from "@/screens/VideoPlayerScreen";
 import PersonDetailScreen from "@/screens/PersonDetailScreen";
 import PlaceholderScreen from "@/screens/PlaceholderScreen";
@@ -69,6 +70,11 @@ function AppStack() {
         name="FilteredVideos"
         component={FilteredVideosScreen}
         options={({ route }: any) => ({ title: route.params?.title || "" })}
+      />
+      <Stack.Screen
+        name="StudioProfile"
+        component={StudioProfileScreen}
+        options={({ route }: any) => ({ title: route.params?.name || "" })}
       />
       <Stack.Screen name="PersonDetail" component={PersonDetailScreen} options={{ title: "" }} />
       <Stack.Screen

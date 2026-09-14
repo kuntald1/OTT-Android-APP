@@ -11,20 +11,23 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { fetchArchive } from "@/api/videos";
+import { fetchArchive, fetchLanguages, fetchStudios, fetchVideosByLanguage, LanguageOption, StudioOption } from "@/api/videos";
 import { fetchArchiveHeroSlides, ArchiveHeroSlide } from "@/api/archive";
 import { resolveMediaUrl } from "@/api/apiClient";
 import { Video } from "@/types";
-import { COLORS, ELEVATION, RADIUS, SPACING, TYPE } from "@/theme";
+import { COLORS, ELEVATION, SPACING, TYPE } from "@/theme";
 import AppHeader from "@/components/AppHeader";
 import GradientBackground from "@/components/GradientBackground";
 import SectionHeader from "@/components/SectionHeader";
-import ArchiveMediaCard from "@/components/ArchiveMediaCard";
+import ArchiveCompactCard from "@/components/ArchiveCompactCard";
+import BrowseTile from "@/components/BrowseTile";
 
 const SLIDE_INTERVAL_MS = 5000;
-// Matches the pink-marked reference: the hero should fill most of the
-// screen, same scale as the ArchiveMediaCard rows below it.
-const HERO_HEIGHT = Dimensions.get("window").height * 0.65;
+// Reference-matched: a short, wide banner (like a typical streaming-app
+// hero carousel) instead of a near-full-screen height — much shorter than
+// before, per explicit feedback that the old height (65% of screen) was
+// too tall.
+const HERO_HEIGHT = Dimensions.get("window").width * 0.55;
 
 function groupByCategory(videos: Video[]): { category: string; videos: Video[] }[] {
   const order: string[] = [];
@@ -52,6 +55,9 @@ export default function ArchiveScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [languages, setLanguages] = useState<LanguageOption[]>([]);
+  const [studios, setStudios] = useState<StudioOption[]>([]);
+  const [loadingLanguage, setLoadingLanguage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -64,6 +70,16 @@ export default function ArchiveScreen() {
       setSlides(await fetchArchiveHeroSlides());
     } catch {
       setSlides([]);
+    }
+    try {
+      setLanguages(await fetchLanguages("archive"));
+    } catch {
+      setLanguages([]);
+    }
+    try {
+      setStudios(await fetchStudios("archive"));
+    } catch {
+      setStudios([]);
     }
   }, []);
 
@@ -109,6 +125,19 @@ export default function ArchiveScreen() {
       ),
     });
 
+  const openLanguage = async (language: string) => {
+    setLoadingLanguage(language);
+    try {
+      const matches = await fetchVideosByLanguage("archive", language);
+      navigation.navigate("FilteredVideos", { title: language, videos: matches });
+    } finally {
+      setLoadingLanguage(null);
+    }
+  };
+
+  const openStudio = (studio: StudioOption) =>
+    navigation.navigate("StudioProfile", { userId: studio.user_id, name: studio.name, section: "archive" });
+
   return (
     <GradientBackground
       style={styles.screen}
@@ -149,9 +178,11 @@ export default function ArchiveScreen() {
                 {activeSlide.eyebrow && (
                   <Text style={styles.heroEyebrow}>{activeSlide.eyebrow.toUpperCase()}</Text>
                 )}
-                <Text style={styles.heroHeadline}>{activeSlide.headline}</Text>
+                <Text style={styles.heroHeadline} numberOfLines={1}>
+                  {activeSlide.headline}
+                </Text>
                 {activeSlide.subtext && (
-                  <Text style={styles.heroSubtext} numberOfLines={2}>
+                  <Text style={styles.heroSubtext} numberOfLines={1}>
                     {activeSlide.subtext}
                   </Text>
                 )}
@@ -175,13 +206,50 @@ export default function ArchiveScreen() {
           {sections.map(({ category, videos: categoryVideos }) => (
             <View key={category} style={styles.section}>
               <SectionHeader title={category} count={categoryVideos.length} />
-              <View style={styles.stack}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.row}
+              >
                 {categoryVideos.map((item) => (
-                  <ArchiveMediaCard key={item.id} video={item} onPress={() => goToDetail(item)} />
+                  <ArchiveCompactCard key={item.id} video={item} onPress={() => goToDetail(item)} />
                 ))}
-              </View>
+              </ScrollView>
             </View>
           ))}
+
+          {languages.length > 0 && !query.trim() && (
+            <View style={styles.section}>
+              <SectionHeader title="Popular Languages" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                {languages.map((l) => (
+                  <BrowseTile
+                    key={l.language}
+                    label={l.language}
+                    posterUrl={l.poster_image_url || undefined}
+                    loading={loadingLanguage === l.language}
+                    onPress={() => openLanguage(l.language)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {studios.length > 0 && !query.trim() && (
+            <View style={styles.section}>
+              <SectionHeader title="Studios" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                {studios.map((s) => (
+                  <BrowseTile
+                    key={s.user_id}
+                    label={s.name}
+                    posterUrl={s.poster_image_url || undefined}
+                    onPress={() => openStudio(s)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </ScrollView>
       )}
     </GradientBackground>
@@ -203,19 +271,19 @@ const styles = StyleSheet.create({
     height: HERO_HEIGHT,
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.sm,
-    borderRadius: RADIUS.lg,
+    borderRadius: 24,
     overflow: "hidden",
     justifyContent: "flex-end",
     backgroundColor: COLORS.archiveDark,
     ...ELEVATION.hero,
   },
-  heroText: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm },
+  heroText: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xs },
   heroEyebrow: { ...TYPE.overline, color: COLORS.archiveGold },
-  heroHeadline: { ...TYPE.display, color: COLORS.cream, marginTop: SPACING.xs },
-  heroSubtext: { ...TYPE.body, color: COLORS.textMuted, marginTop: SPACING.xs, lineHeight: 19 },
-  dotsRow: { flexDirection: "row", gap: 5, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.lg },
+  heroHeadline: { ...TYPE.title, fontSize: 20, color: COLORS.cream, marginTop: 2 },
+  heroSubtext: { ...TYPE.caption, color: COLORS.textMuted, marginTop: 2 },
+  dotsRow: { flexDirection: "row", gap: 5, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.3)" },
   dotActive: { backgroundColor: COLORS.archiveGold, width: 16 },
   section: { marginTop: SPACING.xl },
-  stack: { paddingHorizontal: SPACING.lg, gap: SPACING.lg },
+  row: { paddingHorizontal: SPACING.lg, gap: SPACING.md },
 });

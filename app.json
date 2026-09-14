@@ -39,7 +39,15 @@
         }
       ],
       "expo-image",
-      "expo-font"
+      "expo-font",
+      [
+        "react-native-share",
+        {
+          "ios": ["fb", "instagram"],
+          "android": ["com.facebook.katana", "com.instagram.android"],
+          "enableBase64ShareAndroid": true
+        }
+      ]
     ],
     "extra": {
       "eas": {

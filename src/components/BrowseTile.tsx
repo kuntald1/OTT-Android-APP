@@ -1,5 +1,5 @@
 import React from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { resolveMediaUrl } from "@/api/apiClient";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
@@ -8,15 +8,17 @@ export default function BrowseTile({
   label,
   posterUrl,
   onPress,
+  loading = false,
 }: {
   label: string;
   posterUrl?: string | null;
   onPress: () => void;
+  loading?: boolean;
 }) {
   const resolved = resolveMediaUrl(posterUrl);
 
   return (
-    <TouchableOpacity style={styles.tile} activeOpacity={0.85} onPress={onPress}>
+    <TouchableOpacity style={styles.tile} activeOpacity={0.85} onPress={onPress} disabled={loading}>
       {resolved ? (
         <Image source={{ uri: resolved }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       ) : (
@@ -30,6 +32,11 @@ export default function BrowseTile({
       <Text style={styles.label} numberOfLines={2}>
         {label}
       </Text>
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator color={COLORS.gold} size="small" />
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -46,4 +53,10 @@ const styles = StyleSheet.create({
   },
   fallback: { ...StyleSheet.absoluteFillObject, backgroundColor: COLORS.surfaceStrong },
   label: { ...TYPE.label, color: COLORS.cream, fontWeight: "700" },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

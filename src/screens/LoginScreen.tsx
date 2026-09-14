@@ -130,9 +130,6 @@ export default function LoginScreen() {
     })();
   }, []);
 
-  const [line1, line2] = splitHeadline(headline);
-  const line1Style = useSlideFromSide(300); // enters from the right
-  const line2Style = useSlideFromSide(-300); // enters from the left
   const formStyle = useSlideIn(200);
 
   const handleSubmit = async () => {
@@ -170,17 +167,8 @@ export default function LoginScreen() {
 
       <KeyboardAvoidingView
         style={styles.content}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <Animated.Text style={[styles.headline, line1Style]}>
-          {line1}
-        </Animated.Text>
-        {line2 ? (
-          <Animated.Text style={[styles.headline, styles.headlineLine2, line2Style]}>
-            {line2}
-          </Animated.Text>
-        ) : null}
-
         <Animated.View style={formStyle}>
           <SocialLoginRow />
 
@@ -251,6 +239,7 @@ const styles = StyleSheet.create({
     color: COLORS.gold,
     fontSize: 22,
     fontWeight: "800",
+    textTransform: "uppercase",
     zIndex: 10,
   },
   content: {
@@ -269,7 +258,13 @@ const styles = StyleSheet.create({
   },
   headlineLine2: {
     color: COLORS.gold,
-    marginBottom: 64,
+  },
+  taglineWrap: {
+    marginTop: 24,
+    alignItems: "center",
+  },
+  taglineCentered: {
+    textAlign: "center",
   },
   input: {
     backgroundColor: "rgba(255,255,255,0.08)",

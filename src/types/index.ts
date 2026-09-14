@@ -88,6 +88,7 @@ export interface Subtitle {
 export interface Video {
   id: string;
   uploaded_by_name: string;
+  uploaded_by_user_id: string;
   title: string;
   description: string;
   section: VideoSection;

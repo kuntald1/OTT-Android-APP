@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { fetchPlays } from "@/api/videos";
+import {
+  fetchPlays,
+  fetchLanguages,
+  fetchStudios,
+  fetchVideosByLanguage,
+  LanguageOption,
+  StudioOption,
+} from "@/api/videos";
 import { Video } from "@/types";
 import { COLORS, SPACING } from "@/theme";
 import GradientBackground from "@/components/GradientBackground";
@@ -9,55 +16,47 @@ import AppHeader from "@/components/AppHeader";
 import SectionHeader from "@/components/SectionHeader";
 import BrowseTile from "@/components/BrowseTile";
 
-// One row per way of slicing the catalog. Everything here is derived
-// client-side from the same /videos list Home already fetches — no new
-// backend endpoints needed. "Studio" = uploaded_by_name, since that's the
-// only uploader field videos carry; there's no organiser_id on Video to
-// join against /organisers, so this groups by that name directly.
-function buildRows(videos: Video[]) {
-  const firstPosterFor = (matches: Video[]) =>
-    matches.find((v) => v.poster_image_url || v.thumbnail_url);
+const SECTION: "play" = "play";
 
-  const genreMap = new Map<string, Video[]>();
-  const languageMap = new Map<string, Video[]>();
-  const studioMap = new Map<string, Video[]>();
-
+// Genres has no dedicated backend endpoint (unlike Languages/Studios,
+// confirmed via /videos/languages and /videos/studios), so it's still
+// derived client-side from the full Play video list.
+function buildGenreRow(videos: Video[]) {
+  const map = new Map<string, Video[]>();
   for (const video of videos) {
     for (const genre of video.categories) {
-      if (!genreMap.has(genre)) genreMap.set(genre, []);
-      genreMap.get(genre)!.push(video);
-    }
-    for (const lang of video.languages) {
-      if (!languageMap.has(lang)) languageMap.set(lang, []);
-      languageMap.get(lang)!.push(video);
-    }
-    if (video.uploaded_by_name) {
-      if (!studioMap.has(video.uploaded_by_name)) studioMap.set(video.uploaded_by_name, []);
-      studioMap.get(video.uploaded_by_name)!.push(video);
+      if (!map.has(genre)) map.set(genre, []);
+      map.get(genre)!.push(video);
     }
   }
-
-  const toRow = (map: Map<string, Video[]>) =>
-    Array.from(map.entries()).map(([label, matches]) => ({
-      label,
-      matches,
-      poster: firstPosterFor(matches)?.poster_image_url || firstPosterFor(matches)?.thumbnail_url,
-    }));
-
-  return { genres: toRow(genreMap), languages: toRow(languageMap), studios: toRow(studioMap) };
+  return Array.from(map.entries()).map(([label, matches]) => ({
+    label,
+    matches,
+    poster: matches.find((v) => v.poster_image_url || v.thumbnail_url)?.poster_image_url,
+  }));
 }
 
 export default function CategoriesScreen() {
   const navigation = useNavigation<any>();
   const [videos, setVideos] = useState<Video[]>([]);
+  const [languages, setLanguages] = useState<LanguageOption[]>([]);
+  const [studios, setStudios] = useState<StudioOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [loadingLanguage, setLoadingLanguage] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        setVideos(await fetchPlays());
+        const [playVideos, languageOptions, studioOptions] = await Promise.all([
+          fetchPlays(),
+          fetchLanguages(SECTION),
+          fetchStudios(SECTION),
+        ]);
+        setVideos(playVideos);
+        setLanguages(languageOptions);
+        setStudios(studioOptions);
       } catch {
         setError("Couldn't load categories");
       } finally {
@@ -66,10 +65,23 @@ export default function CategoriesScreen() {
     })();
   }, []);
 
-  const { genres, languages, studios } = useMemo(() => buildRows(videos), [videos]);
+  const genres = useMemo(() => buildGenreRow(videos), [videos]);
 
-  const openList = (title: string, matches: Video[]) =>
+  const openGenre = (title: string, matches: Video[]) =>
     navigation.navigate("FilteredVideos", { title, videos: matches });
+
+  const openLanguage = async (language: string) => {
+    setLoadingLanguage(language);
+    try {
+      const matches = await fetchVideosByLanguage(SECTION, language);
+      navigation.navigate("FilteredVideos", { title: language, videos: matches });
+    } finally {
+      setLoadingLanguage(null);
+    }
+  };
+
+  const openStudio = (studio: StudioOption) =>
+    navigation.navigate("StudioProfile", { userId: studio.user_id, name: studio.name, section: SECTION });
 
   return (
     <GradientBackground style={styles.screen}>
@@ -94,7 +106,7 @@ export default function CategoriesScreen() {
                     key={label}
                     label={label}
                     posterUrl={poster}
-                    onPress={() => openList(label, matches)}
+                    onPress={() => openGenre(label, matches)}
                   />
                 ))}
               </ScrollView>
@@ -105,12 +117,13 @@ export default function CategoriesScreen() {
             <View style={styles.section}>
               <SectionHeader title="Languages" />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-                {languages.map(({ label, matches, poster }) => (
+                {languages.map((l) => (
                   <BrowseTile
-                    key={label}
-                    label={label}
-                    posterUrl={poster}
-                    onPress={() => openList(label, matches)}
+                    key={l.language}
+                    label={l.language}
+                    posterUrl={l.poster_image_url || undefined}
+                    loading={loadingLanguage === l.language}
+                    onPress={() => openLanguage(l.language)}
                   />
                 ))}
               </ScrollView>
@@ -121,12 +134,12 @@ export default function CategoriesScreen() {
             <View style={styles.section}>
               <SectionHeader title="Studios" />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-                {studios.map(({ label, matches, poster }) => (
+                {studios.map((s) => (
                   <BrowseTile
-                    key={label}
-                    label={label}
-                    posterUrl={poster}
-                    onPress={() => openList(label, matches)}
+                    key={s.user_id}
+                    label={s.name}
+                    posterUrl={s.poster_image_url || undefined}
+                    onPress={() => openStudio(s)}
                   />
                 ))}
               </ScrollView>

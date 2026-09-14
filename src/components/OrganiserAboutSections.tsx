@@ -7,22 +7,8 @@ import {
   updateProfileSection,
   deleteProfileSection,
 } from "@/api/organiserProfile";
+import { htmlToPlainText } from "@/utils/html";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
-
-// Strips HTML tags for editing in a plain TextInput. Existing sections
-// (created on the web) can have rich formatting (headings, bold, lists) —
-// editing and saving here flattens that to plain paragraphs. Good enough
-// for quick text fixes; for anything that needs to keep its original
-// formatting, edit it on the web instead.
-function htmlToPlainText(html: string): string {
-  return html
-    .replace(/<\/(p|div|li)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 function plainTextToHtml(text: string): string {
   return text

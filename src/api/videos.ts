@@ -19,6 +19,63 @@ export async function fetchArchive(): Promise<Video[]> {
   return data;
 }
 
+export interface LanguageOption {
+  language: string;
+  poster_image_url: string | null;
+  video_count: number;
+}
+
+// Confirmed: GET /videos/languages?section=play|archive -> the distinct
+// languages present in that section, each with a representative poster
+// and a count — real data instead of deriving languages client-side from
+// the full video list.
+export async function fetchLanguages(section: "play" | "archive"): Promise<LanguageOption[]> {
+  const { data } = await apiClient.get<LanguageOption[]>("/videos/languages", {
+    params: { section },
+  });
+  return data;
+}
+
+export interface StudioOption {
+  user_id: string;
+  name: string;
+  poster_image_url: string | null;
+  video_count: number;
+}
+
+// Confirmed: GET /videos/studios?section=play|archive -> the distinct
+// uploader ("studio") accounts with content in that section.
+export async function fetchStudios(section: "play" | "archive"): Promise<StudioOption[]> {
+  const { data } = await apiClient.get<StudioOption[]>("/videos/studios", {
+    params: { section },
+  });
+  return data;
+}
+
+// Confirmed: GET /videos?section=X&language=Y -> videos filtered server-side
+// by language, same shape as fetchPlays/fetchArchive.
+export async function fetchVideosByLanguage(
+  section: "play" | "archive",
+  language: string
+): Promise<Video[]> {
+  const { data } = await apiClient.get<Video[]>("/videos", {
+    params: { section, language },
+  });
+  return data;
+}
+
+// Confirmed: GET /videos?section=X&uploaded_by=<user_id> -> a studio's
+// videos within that section.
+export async function fetchVideosByStudio(
+  section: "play" | "archive",
+  userId: string
+): Promise<Video[]> {
+  const { data } = await apiClient.get<Video[]>("/videos", {
+    params: { section, uploaded_by: userId },
+  });
+  return data;
+}
+
 // Confirmed: POST /my-list/toggle { item_id, title, image_url, meta, section }
 // -> { saved: boolean }
 export async function toggleMyList(item: {

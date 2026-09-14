@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { COLORS } from "@/theme/colors";
 
@@ -24,8 +25,9 @@ const ORGANISER_MENU: { label: string; route: string }[] = [
   { label: "Event Listing Enquiry", route: "EventListingEnquiry" },
 ];
 
-// Now opened from the bottom-right profile avatar (bottom tab bar) instead
-// of a top hamburger menu.
+// Opened from the profile avatar in AppHeader's top-right corner — the
+// dropdown anchors under that same corner (not centered/bottom), so it
+// visually reads as coming from where the avatar was tapped.
 export default function ProfileMenuModal({
   visible,
   onClose,
@@ -35,6 +37,7 @@ export default function ProfileMenuModal({
 }) {
   const navigation = useNavigation<any>();
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const menuItems = [...BASE_MENU];
   if (!user?.role || user.role === "user") {
@@ -46,7 +49,10 @@ export default function ProfileMenuModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable
+        style={[styles.backdrop, { paddingTop: insets.top + 56 }]}
+        onPress={onClose}
+      >
         <View style={styles.card}>
           {menuItems.map((item) => (
             <TouchableOpacity
@@ -94,10 +100,8 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
     alignItems: "flex-end",
-    paddingRight: 12,
-    paddingBottom: 78,
+    paddingRight: 16,
   },
   card: {
     backgroundColor: COLORS.burgundyDark,

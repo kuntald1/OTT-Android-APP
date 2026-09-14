@@ -12,7 +12,12 @@ import {
   fetchContinueWatching,
   fetchPlays,
   fetchRecommendations,
+  fetchLanguages,
+  fetchStudios,
+  fetchVideosByLanguage,
   ContinueWatchingItem,
+  LanguageOption,
+  StudioOption,
 } from "@/api/videos";
 import { Video } from "@/types";
 import { COLORS, SPACING, TYPE } from "@/theme";
@@ -22,6 +27,7 @@ import FeaturedCarousel from "@/components/FeaturedCarousel";
 import SectionHeader from "@/components/SectionHeader";
 import MediaCard from "@/components/MediaCard";
 import CategoryRow from "@/components/CategoryRow";
+import BrowseTile from "@/components/BrowseTile";
 
 // Groups videos by category the same way the web app's rows work — a video
 // with multiple categories appears in each of its category rows.
@@ -45,6 +51,9 @@ export default function PlaysBrowseScreen() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
   const [recommended, setRecommended] = useState<Video[]>([]);
+  const [languages, setLanguages] = useState<LanguageOption[]>([]);
+  const [studios, setStudios] = useState<StudioOption[]>([]);
+  const [loadingLanguage, setLoadingLanguage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +77,16 @@ export default function PlaysBrowseScreen() {
       setRecommended(await fetchRecommendations());
     } catch {
       setRecommended([]);
+    }
+    try {
+      setLanguages(await fetchLanguages("play"));
+    } catch {
+      setLanguages([]);
+    }
+    try {
+      setStudios(await fetchStudios("play"));
+    } catch {
+      setStudios([]);
     }
   }, []);
 
@@ -109,6 +128,19 @@ export default function PlaysBrowseScreen() {
     if (y != null) scrollRef.current?.scrollTo({ y, animated: true });
   };
 
+  const openLanguage = async (language: string) => {
+    setLoadingLanguage(language);
+    try {
+      const matches = await fetchVideosByLanguage("play", language);
+      navigation.navigate("FilteredVideos", { title: language, videos: matches });
+    } finally {
+      setLoadingLanguage(null);
+    }
+  };
+
+  const openStudio = (studio: StudioOption) =>
+    navigation.navigate("StudioProfile", { userId: studio.user_id, name: studio.name, section: "play" });
+
   return (
     <GradientBackground style={styles.screen}>
       <AppHeader activeRoute="Plays" onSearch={setQuery} showSwitcher />
@@ -136,6 +168,29 @@ export default function PlaysBrowseScreen() {
               <FeaturedCarousel videos={videos.slice(0, 8)} onPressCard={goToDetail} />
             </View>
           )}
+
+          {sections.length === 0 && (
+            <View style={styles.center}>
+              <Text style={styles.errorText}>Nothing found</Text>
+            </View>
+          )}
+
+          {sections.map(({ category, videos: categoryVideos }) => (
+            <View
+              key={category}
+              style={styles.section}
+              onLayout={(e) => {
+                sectionOffsets[category] = e.nativeEvent.layout.y;
+              }}
+            >
+              <SectionHeader title={category} count={categoryVideos.length} />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                {categoryVideos.map((item) => (
+                  <MediaCard key={item.id} video={item} onPress={() => goToDetail(item)} />
+                ))}
+              </ScrollView>
+            </View>
+          ))}
 
           {continueWatching.length > 0 && !searching && (
             <View style={styles.section}>
@@ -178,28 +233,38 @@ export default function PlaysBrowseScreen() {
             </View>
           )}
 
-          {sections.length === 0 && (
-            <View style={styles.center}>
-              <Text style={styles.errorText}>Nothing found</Text>
-            </View>
-          )}
-
-          {sections.map(({ category, videos: categoryVideos }) => (
-            <View
-              key={category}
-              style={styles.section}
-              onLayout={(e) => {
-                sectionOffsets[category] = e.nativeEvent.layout.y;
-              }}
-            >
-              <SectionHeader title={category} count={categoryVideos.length} />
+          {languages.length > 0 && !searching && (
+            <View style={styles.section}>
+              <SectionHeader title="Popular Languages" />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-                {categoryVideos.map((item) => (
-                  <MediaCard key={item.id} video={item} onPress={() => goToDetail(item)} />
+                {languages.map((l) => (
+                  <BrowseTile
+                    key={l.language}
+                    label={l.language}
+                    posterUrl={l.poster_image_url || undefined}
+                    loading={loadingLanguage === l.language}
+                    onPress={() => openLanguage(l.language)}
+                  />
                 ))}
               </ScrollView>
             </View>
-          ))}
+          )}
+
+          {studios.length > 0 && !searching && (
+            <View style={styles.section}>
+              <SectionHeader title="Studios" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                {studios.map((s) => (
+                  <BrowseTile
+                    key={s.user_id}
+                    label={s.name}
+                    posterUrl={s.poster_image_url || undefined}
+                    onPress={() => openStudio(s)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </ScrollView>
       )}
     </GradientBackground>

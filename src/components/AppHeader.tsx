@@ -4,6 +4,8 @@ import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
+import { useAuth } from "@/context/AuthContext";
+import ProfileMenuModal from "@/components/ProfileMenuModal";
 
 // theomy wordmark, a search icon that expands into an input, and a
 // Play/Archive pill switcher on its own row underneath (shown on the Home
@@ -19,8 +21,10 @@ export default function AppHeader({
 }) {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -74,9 +78,14 @@ export default function AppHeader({
           <View style={styles.topRow}>
             <Text style={styles.brandMark}>theomy</Text>
 
-            <TouchableOpacity style={styles.searchIconButton} onPress={() => setSearchOpen(true)}>
-              <Text style={styles.searchIcon}>🔍</Text>
-            </TouchableOpacity>
+            <View style={styles.topRightGroup}>
+              <TouchableOpacity style={styles.searchIconButton} onPress={() => setSearchOpen(true)}>
+                <Text style={styles.searchIcon}>🔍</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.avatarButton} onPress={() => setProfileMenuVisible(true)}>
+                <Text style={styles.avatarInitial}>{user?.name?.[0]?.toUpperCase() || "?"}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {showSwitcher && (
@@ -91,6 +100,8 @@ export default function AppHeader({
           )}
         </>
       )}
+
+      <ProfileMenuModal visible={profileMenuVisible} onClose={() => setProfileMenuVisible(false)} />
     </View>
   );
 }
@@ -104,7 +115,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 14,
   },
-  brandMark: { color: COLORS.gold, fontSize: 22, fontWeight: "800" },
+  brandMark: { color: COLORS.gold, fontSize: 22, fontWeight: "800", textTransform: "uppercase" },
+  topRightGroup: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatarButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.gold,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarInitial: { color: COLORS.ctaText, fontSize: 13, fontWeight: "700" },
   switcherRow: {
     flexDirection: "row",
     justifyContent: "center",

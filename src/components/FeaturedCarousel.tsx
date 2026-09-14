@@ -69,7 +69,7 @@ export default function FeaturedCarousel({
                   source={{ uri: video.trailer_playback_url }}
                   style={StyleSheet.absoluteFill}
                   resizeMode="cover"
-                  muted
+                  muted={false}
                   repeat
                   paused={false}
                 />

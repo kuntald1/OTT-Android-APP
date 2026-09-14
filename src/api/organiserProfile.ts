@@ -38,3 +38,18 @@ export async function updateProfileSection(
 export async function deleteProfileSection(id: string): Promise<void> {
   await apiClient.delete(`/organiser-profile/sections/${id}`);
 }
+
+// Confirmed: GET /organiser-profile/{user_id}/sections -> the PUBLIC view
+// of any organiser's About sections (path-keyed by user_id, not the
+// logged-in user like /organiser-profile/sections above). Used when a
+// viewer taps a Studio tile in Categories.
+export async function fetchPublicOrganiserSections(userId: string): Promise<ProfileSection[]> {
+  const { data } = await apiClient.get<ProfileSection[]>(`/organiser-profile/${userId}/sections`);
+  return data;
+}
+
+// Confirmed: GET /organiser-profile/{user_id}/cover -> { cover_image_url }.
+export async function fetchOrganiserCover(userId: string): Promise<{ cover_image_url: string | null }> {
+  const { data } = await apiClient.get(`/organiser-profile/${userId}/cover`);
+  return data;
+}

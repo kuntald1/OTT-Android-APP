@@ -147,16 +147,15 @@ export default function VideoDetailScreen() {
     <ScrollView style={styles.container}>
       <View style={styles.poster}>
         {video.trailer_playback_url && !trailerFailed ? (
-          // Autoplaying trailer preview (muted, looping) — the same
-          // "hover to preview" idea from the web, adapted for mobile: it
-          // just plays automatically when the detail screen opens.
-          // Deliberately not wired to playback-session/heartbeat/progress,
-          // so trailer time never counts toward paid watch-minutes.
+          // Autoplaying trailer preview (looping, with sound) — plays
+          // automatically when the detail screen opens. Deliberately not
+          // wired to playback-session/heartbeat/progress, so trailer time
+          // never counts toward paid watch-minutes.
           <RNVideo
             source={{ uri: video.trailer_playback_url }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
-            muted
+            muted={false}
             repeat
             paused={false}
             onError={() => setTrailerFailed(true)}
@@ -238,6 +237,25 @@ export default function VideoDetailScreen() {
           </View>
         )}
 
+        {video.uploaded_by_name && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeading}>STUDIO</Text>
+            <TouchableOpacity
+              style={styles.studioRow}
+              onPress={() =>
+                navigation.navigate("StudioProfile", {
+                  userId: video.uploaded_by_user_id,
+                  name: video.uploaded_by_name,
+                  section: video.section,
+                })
+              }
+            >
+              <Text style={styles.studioName}>{video.uploaded_by_name}</Text>
+              <Text style={styles.studioChevron}>›</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {recommended.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionHeading}>MORE LIKE THIS</Text>
@@ -311,6 +329,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionItem: { color: COLORS.cream, opacity: 0.85, fontSize: 14 },
+  studioRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  studioName: { color: COLORS.gold, fontSize: 15, fontWeight: "700" },
+  studioChevron: { color: COLORS.gold, fontSize: 20 },
   personRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
   personPhoto: {
     width: 32,
