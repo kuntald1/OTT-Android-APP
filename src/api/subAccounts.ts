@@ -9,6 +9,11 @@ export interface SubAccount {
   email: string;
   is_active: boolean;
   created_at: string;
+  // Whether the parent declared this account for someone under 18 (Admin
+  // decision, Sept 2026) — set once at creation and never changed here.
+  // A declared minor never provides date of birth/city; a declared adult
+  // is prompted to add its own on its own first login.
+  is_minor: boolean;
 }
 
 export async function fetchMySubAccounts(): Promise<{
@@ -32,8 +37,14 @@ export async function createSubAccount(payload: {
   name: string;
   email: string;
   password: string;
+  isMinor: boolean;
 }): Promise<SubAccount> {
-  const { data } = await apiClient.post<SubAccount>("/sub-accounts", payload);
+  const { data } = await apiClient.post<SubAccount>("/sub-accounts", {
+    name: payload.name,
+    email: payload.email,
+    password: payload.password,
+    is_minor: payload.isMinor,
+  });
   return data;
 }
 

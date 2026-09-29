@@ -17,9 +17,25 @@ export function resolveMediaUrl(path?: string | null): string | undefined {
 }
 
 const TOKEN_KEY = "theomy_auth_token";
+const PLAYBACK_SESSION_KEY = "theomy_playback_session";
 
 export async function getStoredToken(): Promise<string | null> {
   return SecureStore.getItemAsync(TOKEN_KEY);
+}
+
+// A stable per-DEVICE id used for the screens limit (see the web app's
+// getPlaybackSessionToken in src/api.js — same idea, SecureStore here
+// instead of localStorage). The CLIENT generates and owns this; the
+// backend never issues one. It must persist across app restarts so a
+// relaunch reuses the same playback slot rather than consuming a
+// second one.
+export async function getPlaybackSessionToken(): Promise<string> {
+  let token = await SecureStore.getItemAsync(PLAYBACK_SESSION_KEY);
+  if (!token) {
+    token = `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    await SecureStore.setItemAsync(PLAYBACK_SESSION_KEY, token);
+  }
+  return token;
 }
 
 export async function setStoredToken(token: string): Promise<void> {
@@ -28,6 +44,25 @@ export async function setStoredToken(token: string): Promise<void> {
 
 export async function clearStoredToken(): Promise<void> {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
+}
+
+// FastAPI puts validation/auth errors in `error.response.data.detail` — a
+// plain string for our own HTTPException calls, but a LIST of Pydantic
+// error objects (one per invalid field) for schema validation failures
+// (422s), e.g. a malformed email. Screens that read
+// `e?.response?.data?.detail` directly and render it in a <Text> would
+// otherwise try to render an array/object, which React Native rejects —
+// this always returns a plain, displayable string.
+export function extractErrorMessage(error: any, fallback = "Something went wrong. Please try again."): string {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    const raw = typeof detail[0]?.msg === "string" ? detail[0].msg : null;
+    // Pydantic v2 prefixes some messages with "Value error, " — that's an
+    // implementation detail, not something to show the person.
+    return raw ? raw.replace(/^Value error,\s*/i, "") : "Please check the highlighted field and try again.";
+  }
+  return fallback;
 }
 
 // Set by AuthContext so the interceptor can force a logout on 401

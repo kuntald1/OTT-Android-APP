@@ -57,7 +57,13 @@ export default function MediaCard({
           style={styles.posterOverlay}
         />
 
-        {!video.has_access && (
+        {/* Explicitly === false, not just falsy — see
+            ArchiveCompactCard.tsx's identical comment for why: a video
+            whose access status is genuinely UNKNOWN (not confirmed
+            inaccessible) should never show a lock badge. Real access
+            is enforced at play-time regardless, so this is only ever
+            a hint. */}
+        {video.has_access === false && (
           <View style={styles.lockChip}>
             <Text style={styles.lockChipText}>🔒</Text>
           </View>

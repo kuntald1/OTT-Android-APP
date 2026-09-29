@@ -25,6 +25,10 @@ import RequestOrganiserScreen from "@/screens/RequestOrganiserScreen";
 import HelpCenterScreen from "@/screens/HelpCenterScreen";
 import SubscriptionPlansScreen from "@/screens/SubscriptionPlansScreen";
 import RevenueScreen from "@/screens/RevenueScreen";
+import MyVideoListScreen from "@/screens/MyVideoListScreen";
+import EventListingEnquiryScreen from "@/screens/EventListingEnquiryScreen";
+import CompleteProfileModal from "@/components/CompleteProfileModal";
+import WhosWatching from "@/components/WhosWatching";
 import { COLORS } from "@/theme/colors";
 
 const Stack = createNativeStackNavigator();
@@ -42,7 +46,9 @@ const theme = {
 
 // Nav-bar destinations and profile-menu destinations that aren't built yet
 // render PlaceholderScreen so tapping them never dead-ends or crashes.
-const STUB_ROUTES = ["MyVideoList", "EventListingEnquiry"];
+// MyVideoList and EventListingEnquiry graduated out of this list once
+// their real (view-only) screens were built.
+const STUB_ROUTES: string[] = [];
 
 function AppStack() {
   return (
@@ -113,6 +119,16 @@ function AppStack() {
         options={{ title: "Subscription Plans" }}
       />
       <Stack.Screen name="Revenue" component={RevenueScreen} options={{ title: "Revenue" }} />
+      <Stack.Screen
+        name="MyVideoList"
+        component={MyVideoListScreen}
+        options={{ title: "My Video List" }}
+      />
+      <Stack.Screen
+        name="EventListingEnquiry"
+        component={EventListingEnquiryScreen}
+        options={{ title: "Event Listing Enquiry" }}
+      />
       {STUB_ROUTES.map((route) => (
         <Stack.Screen key={route} name={route} component={PlaceholderScreen} />
       ))}
@@ -132,7 +148,7 @@ function AuthStack() {
 }
 
 export default function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, familyPickerOpen } = useAuth();
 
   if (isLoading) {
     return (
@@ -145,6 +161,22 @@ export default function RootNavigator() {
   return (
     <NavigationContainer theme={theme}>
       {isAuthenticated ? <AppStack /> : <AuthStack />}
+      {/* Rendered on top of AppStack (not gated behind it), so it's a true
+          blocking overlay over whatever screen is currently showing —
+          matches the web app's undismissable modal. Never shown when
+          !isAuthenticated (needsProfileCompletion only becomes true after
+          a successful login/session-restore — see AuthContext.tsx).
+          Suppressed while the family picker is open: right after a login,
+          BOTH could technically be true at once (a just-logged-in account
+          that also has a family) — the picker takes precedence so the
+          person picks who's watching first, and whichever account they
+          land on is checked for its own profile completion afterward
+          (applyAccountSwitch already re-runs that check). Two simultaneous
+          full-screen Modals don't stack reliably on RN the way two
+          absolutely-positioned web overlays with different z-indexes do,
+          so this avoids relying on that. */}
+      {isAuthenticated && !familyPickerOpen && <CompleteProfileModal />}
+      {isAuthenticated && <WhosWatching />}
     </NavigationContainer>
   );
 }

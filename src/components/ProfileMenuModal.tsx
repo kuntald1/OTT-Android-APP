@@ -12,9 +12,9 @@ const BASE_MENU: { label: string; route: string }[] = [
   { label: "Help Center", route: "HelpCenter" },
 ];
 
-// "Request as Organiser" only makes sense for a plain "user" — someone
-// already approved as plays_organiser (or content_creator) doesn't need it.
-const REQUEST_ORGANISER_ITEM = { label: "Request as Organiser", route: "RequestOrganiser" };
+// Not a real screen — intercepted in the onPress handler below to open
+// "Who's watching?" instead of navigating.
+const SWITCH_ACCOUNT_ROUTE = "__SWITCH_ACCOUNT__";
 
 // Shown only for the "plays_organiser" role, matching the web app's profile
 // dropdown — placed after Help Center and before the user/logout block.
@@ -36,15 +36,23 @@ export default function ProfileMenuModal({
   onClose: () => void;
 }) {
   const navigation = useNavigation<any>();
-  const { user, logout } = useAuth();
+  const { user, logout, hasFamily, openFamilyPicker } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const menuItems = [...BASE_MENU];
-  if (!user?.role || user.role === "user") {
-    menuItems.splice(2, 0, REQUEST_ORGANISER_ITEM);
-  }
+  // A family sub-account shares its parent's plan and can't buy/change one, so
+  // the plans entry is left out for it (see SubscriptionPlansScreen).
+  const menuItems = user?.parent_id
+    ? BASE_MENU.filter((item) => item.route !== "SubscriptionPlans")
+    : [...BASE_MENU];
   if (user?.role === "plays_organiser") {
     menuItems.push(...ORGANISER_MENU);
+  }
+  // "Switch account" ("Who's watching?") — right after Manage Profile,
+  // before Watch History, matching the web app's dropdown order exactly.
+  // Only shown when this account actually has a family to switch to.
+  if (hasFamily) {
+    const manageProfileIndex = menuItems.findIndex((item) => item.route === "ManageProfile");
+    menuItems.splice(manageProfileIndex + 1, 0, { label: "Switch account", route: SWITCH_ACCOUNT_ROUTE });
   }
 
   return (
@@ -60,7 +68,11 @@ export default function ProfileMenuModal({
               style={styles.item}
               onPress={() => {
                 onClose();
-                navigation.navigate(item.route);
+                if (item.route === SWITCH_ACCOUNT_ROUTE) {
+                  openFamilyPicker();
+                } else {
+                  navigation.navigate(item.route);
+                }
               }}
             >
               <Text style={styles.itemText}>{item.label}</Text>

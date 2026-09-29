@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,13 +11,17 @@ import {
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import RNVideo from "react-native-video";
-import { resolveMediaUrl } from "@/api/apiClient";
+import { getPlaybackSessionToken, resolveMediaUrl } from "@/api/apiClient";
 import {
+  fetchArchive,
+  fetchPlays,
   fetchRecommendations,
   startPlaybackSession,
   toggleLike,
   toggleMyList,
 } from "@/api/videos";
+import { onSubscriptionChanged } from "@/hooks/useSubscriptionAccess";
+import { useAuth } from "@/context/AuthContext";
 import { CastMember, CrewMember, Video } from "@/types";
 import { COLORS } from "@/theme/colors";
 
@@ -29,6 +33,7 @@ import { COLORS } from "@/theme/colors";
 export default function VideoDetailScreen() {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
+  const { user } = useAuth();
   const video: Video = route.params.video;
   const fallbackRelated: Video[] = route.params.relatedVideos || [];
 
@@ -36,6 +41,11 @@ export default function VideoDetailScreen() {
   const [likesCount, setLikesCount] = useState(video.likes_count);
   const [inMyList, setInMyList] = useState(video.in_my_list);
   const [startingPlayback, setStartingPlayback] = useState(false);
+  // Themed replacement for the native Alert.alert — the OS dialog
+  // can't be styled to match the app (plain white/system look), so
+  // playback-blocking messages (screens limit, connection failure) use
+  // this instead.
+  const [alertMessage, setAlertMessage] = useState<{ title: string; body: string } | null>(null);
   const [recommended, setRecommended] = useState<Video[]>(fallbackRelated);
   const [trailerFailed, setTrailerFailed] = useState(false);
 
@@ -50,6 +60,27 @@ export default function VideoDetailScreen() {
       }
     })();
   }, [video.id]);
+
+  // This screen shows a snapshot of the video taken when it was opened, so
+  // after subscribing (e.g. tapped "Subscribe" here, paid, came back) it
+  // would keep showing the old locked state. On a subscription change, look
+  // this video up again in the section lists (which carry the real
+  // has_access) and swap it into the route params.
+  useEffect(
+    () =>
+      onSubscriptionChanged(() => {
+        (async () => {
+          try {
+            const [plays, archive] = await Promise.all([fetchPlays(), fetchArchive()]);
+            const fresh = [...plays, ...archive].find((v) => v.id === video.id);
+            if (fresh) navigation.setParams({ video: fresh });
+          } catch {
+            // Keep showing the current state; a manual reopen still works.
+          }
+        })();
+      }),
+    [video.id, navigation]
+  );
 
   const handleToggleLike = async () => {
     setLiked(!liked);
@@ -83,21 +114,28 @@ export default function VideoDetailScreen() {
   const handlePlay = async () => {
     setStartingPlayback(true);
     try {
-      const session = await startPlaybackSession(video.id);
+      const sessionToken = await getPlaybackSessionToken();
+      const session = await startPlaybackSession(video.id, sessionToken);
       if (!session.allowed) {
-        Alert.alert(
-          "Too many screens active",
-          session.reason ||
-            `Up to ${session.max_screens} screens can play at once — ${session.active_screens} are active right now.`
-        );
+        setAlertMessage({
+          title: "Too many screens active",
+          body:
+            session.reason ||
+            `Up to ${session.max_screens} screens can play at once — ${session.active_screens} are active right now.`,
+        });
         return;
       }
       navigation.navigate("VideoPlayer", {
         video,
-        playbackSessionToken: session.session_token,
+        playbackSessionToken: sessionToken,
       });
     } catch {
-      navigation.navigate("VideoPlayer", { video });
+      // Fail CLOSED, not open. Previously this fell through to
+      // navigate("VideoPlayer", { video }) with no token, which meant
+      // any error here silently bypassed the screens limit and left
+      // the device invisible to it. Better to tell the viewer to
+      // retry than to hand out an unmetered stream.
+      setAlertMessage({ title: "Couldn't start playback", body: "Please check your connection and try again." });
     } finally {
       setStartingPlayback(false);
     }
@@ -144,6 +182,7 @@ export default function VideoDetailScreen() {
   );
 
   return (
+    <>
     <ScrollView style={styles.container}>
       <View style={styles.poster}>
         {video.trailer_playback_url && !trailerFailed ? (
@@ -181,7 +220,7 @@ export default function VideoDetailScreen() {
         <Text style={styles.title}>{video.title}</Text>
 
         <View style={styles.actionRow}>
-          {video.has_access && (
+          {video.has_access !== false && (
             <TouchableOpacity style={styles.playButton} onPress={handlePlay} disabled={startingPlayback}>
               {startingPlayback ? (
                 <ActivityIndicator color={COLORS.ctaText} size="small" />
@@ -208,38 +247,61 @@ export default function VideoDetailScreen() {
 
         {video.description && <Text style={styles.description}>{video.description}</Text>}
 
-        {!video.has_access && (
-          <View style={styles.lockedBox}>
+        {/* Explicitly === false — see the resolveFullVideo fix in
+            PlaysBrowseScreen.tsx/ArchiveScreen.tsx for the real fix
+            (cross-section videos now resolve to their true
+            has_access); this is only a backup for the rare case a
+            video isn't found in either pool. Genuinely unknown access
+            should never show this box — real enforcement still
+            happens server-side when the stream itself is requested.
+
+            Message is specific to THIS video's own section (Play or
+            Archive) rather than a generic "a subscription is needed" —
+            a Play-only subscriber hitting an Archive video should be
+            told exactly what to add ("Subscribe to Archive"), not left
+            to guess which of the two plans covers it. */}
+        {video.has_access === false && (
+          <TouchableOpacity
+            style={styles.lockedBox}
+            onPress={() => navigation.navigate("SubscriptionPlans")}
+          >
             <Text style={styles.lockedText}>
               {video.monetization_type === "pay_per_video" && video.pricing
                 ? `₹${video.pricing.price_inr} needed to watch this video`
+                : user?.parent_id
+                // A sub-account can't buy a plan; the main account holder does.
+                ? `Ask the main account holder to add ${video.section === "archive" ? "Archive" : video.section === "play" ? "Play" : "a plan"} to watch this video`
+                : video.section === "archive"
+                ? "Subscribe to Archive to watch this video"
+                : video.section === "play"
+                ? "Subscribe to Play to watch this video"
                 : "A subscription is needed to watch this video"}
             </Text>
-          </View>
+          </TouchableOpacity>
         )}
 
-        {video.categories.length > 0 && (
+        {video.categories && video.categories.length > 0 && (
           <View style={styles.metaBlock}>
             <Text style={styles.metaLabel}>GENRES</Text>
             <Text style={styles.metaValue}>{video.categories.join(", ")}</Text>
           </View>
         )}
 
-        {video.languages.length > 0 && (
+        {video.languages && video.languages.length > 0 && (
           <View style={styles.metaBlock}>
             <Text style={styles.metaLabel}>AVAILABLE IN</Text>
             <Text style={styles.metaValue}>{video.languages.join(", ")}</Text>
           </View>
         )}
 
-        {video.cast.length > 0 && (
+        {video.cast && video.cast.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionHeading}>CAST</Text>
             {video.cast.map(renderCastRow)}
           </View>
         )}
 
-        {video.crew.length > 0 && (
+        {video.crew && video.crew.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionHeading}>CREW</Text>
             {video.crew.map(renderCrewRow)}
@@ -286,10 +348,50 @@ export default function VideoDetailScreen() {
         )}
       </View>
     </ScrollView>
+
+    <Modal visible={!!alertMessage} transparent animationType="fade" onRequestClose={() => setAlertMessage(null)}>
+      <View style={styles.alertOverlay}>
+        <View style={styles.alertBox}>
+          <Text style={styles.alertTitle}>{alertMessage?.title}</Text>
+          <Text style={styles.alertBody}>{alertMessage?.body}</Text>
+          <TouchableOpacity style={styles.alertButton} onPress={() => setAlertMessage(null)}>
+            <Text style={styles.alertButtonText}>OK</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  alertBox: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: COLORS.burgundyDark,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(212,175,55,0.35)",
+  },
+  alertTitle: { color: COLORS.cream, fontSize: 17, fontWeight: "700", marginBottom: 8 },
+  alertBody: { color: COLORS.cream, opacity: 0.85, fontSize: 14, lineHeight: 20 },
+  alertButton: {
+    alignSelf: "flex-end",
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: COLORS.gold,
+  },
+  alertButtonText: { color: COLORS.ctaText, fontSize: 14, fontWeight: "700" },
   container: { flex: 1, backgroundColor: COLORS.background },
   poster: {
     width: "100%",

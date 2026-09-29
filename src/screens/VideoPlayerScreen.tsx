@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useRoute } from "@react-navigation/native";
 import RNVideo, { OnLoadData, VideoRef } from "react-native-video";
 import { getStoredToken } from "@/api/apiClient";
-import { saveProgress, sendWatchHeartbeat } from "@/api/videos";
+import { saveProgress, sendWatchHeartbeat, endPlaybackSession } from "@/api/videos";
 import { Video } from "@/types";
 import { COLORS } from "@/theme/colors";
 
@@ -27,10 +27,25 @@ export default function VideoPlayerScreen() {
   const [isAdPlaying, setIsAdPlaying] = useState(false);
   const [authToken, setAuthToken] = useState<string | null | undefined>(undefined);
 
+  // Watch-segment tracker — mirrors the web app's
+  // src/shared/watchSegmentTracker.js exactly, so both platforms feed
+  // the backend's range-based crediting model (see
+  // backend/app/routers/watch.py's _merge_watched_range) the same way:
+  // the CURRENT continuously-watched stretch [segmentStart, lastPos]
+  // of the video's own timeline, reset to a fresh segment on every
+  // seek/scrub. Resending an already-reported/overlapping segment is
+  // always safe — the backend's watched-ranges union merge is
+  // idempotent — so there's no need to advance segmentStart after each
+  // periodic flush, only an actual seek should start a new one.
+  const segmentStartRef = useRef<number | null>(null);
+  const lastPositionRef = useRef<number | null>(null);
   const isPlayingRef = useRef(false);
-  const watchedSinceLastBeatRef = useRef(0);
-  const lastTickRef = useRef<number | null>(null);
   const currentPositionSecondsRef = useRef(isTrailer ? 0 : video.resume_position_seconds || 0);
+
+  const reportPosition = (pos: number) => {
+    if (segmentStartRef.current === null) segmentStartRef.current = pos;
+    lastPositionRef.current = pos;
+  };
 
   const sourceUrl = isTrailer ? video.trailer_playback_url : video.playback_url;
   const hasAds = !isTrailer && video.ad_cue_points && video.ad_cue_points.length > 0;
@@ -52,37 +67,43 @@ export default function VideoPlayerScreen() {
     })();
   }, [isTrailer]);
 
-  useEffect(() => {
-    if (isTrailer) return;
-    const interval = setInterval(() => {
-      const now = Date.now();
-      // Ad time is excluded the same way paused/buffering time is — the
-      // watched-time timer only accumulates while content is actually
-      // playing, never during an ad break.
-      if (isPlayingRef.current && !isAdPlaying && lastTickRef.current) {
-        watchedSinceLastBeatRef.current += (now - lastTickRef.current) / 1000;
+  const flushSegment = async () => {
+    const start = segmentStartRef.current;
+    const end = lastPositionRef.current;
+    if (start === null || end === null || end <= start) return;
+    const roundedStart = Math.round(start);
+    const roundedEnd = Math.round(end);
+    if (roundedEnd <= roundedStart) return;
+    try {
+      if (playbackSessionToken) {
+        await sendWatchHeartbeat(video.id, roundedStart, roundedEnd, playbackSessionToken);
       }
-      lastTickRef.current = now;
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isAdPlaying, isTrailer]);
+      await saveProgress(video.id, roundedEnd);
+    } catch {
+      // Silently retry next tick — the segment stays tracked (not
+      // reset), so the next successful heartbeat just resends a
+      // slightly longer version of the same stretch.
+    }
+  };
 
   useEffect(() => {
     if (isTrailer) return;
-    const interval = setInterval(async () => {
-      const seconds = Math.round(watchedSinceLastBeatRef.current);
-      if (seconds <= 0) return;
-      watchedSinceLastBeatRef.current = 0;
-      try {
-        if (playbackSessionToken) {
-          await sendWatchHeartbeat(video.id, playbackSessionToken, seconds);
-        }
-        await saveProgress(video.id, Math.round(currentPositionSecondsRef.current));
-      } catch {
-        // Silently retry next tick.
+    const interval = setInterval(flushSegment, HEARTBEAT_INTERVAL_MS);
+    return () => {
+      clearInterval(interval);
+      flushSegment(); // final heartbeat on unmount so the last stretch isn't lost
+      // Frees this device's screens-limit slot immediately instead of
+      // waiting out the backend's 50s stale-session window — matters
+      // when someone closes the player and wants to start watching on
+      // another device right away.
+      if (playbackSessionToken) {
+        endPlaybackSession(playbackSessionToken).catch(() => {
+          // Not critical — the backend's own 50s timeout frees the slot
+          // anyway if this call fails (e.g. app killed mid-request).
+        });
       }
-    }, HEARTBEAT_INTERVAL_MS);
-    return () => clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video.id, playbackSessionToken, isTrailer]);
 
   const handleLoad = (data: OnLoadData) => {
@@ -96,6 +117,40 @@ export default function VideoPlayerScreen() {
 
   const handleProgress = (data: { currentTime: number }) => {
     currentPositionSecondsRef.current = data.currentTime;
+    // Ad time is excluded the same way paused/buffering time is — the
+    // segment tracker only accumulates while content is actually
+    // playing, never during an ad break.
+    if (isPlayingRef.current && !isAdPlaying) {
+      // Safety net for react-native-video's onSeek not firing when the
+      // NATIVE controls scrubber is dragged (a known issue on v6) — if
+      // position jumped by much more than one progress tick's worth of
+      // real playback, treat it as an undetected seek: flush whatever
+      // was genuinely watched so far, then start a fresh segment at the
+      // new position. Without this, a scrubbed-past range could get
+      // silently reported to the backend as watched.
+      const last = lastPositionRef.current;
+      const JUMP_THRESHOLD_SECONDS = 3;
+      if (last !== null && Math.abs(data.currentTime - last) > JUMP_THRESHOLD_SECONDS) {
+        flushSegment();
+        segmentStartRef.current = data.currentTime;
+        lastPositionRef.current = data.currentTime;
+      } else {
+        reportPosition(data.currentTime);
+      }
+    }
+  };
+
+  // Fires once a seek (via the native scrubber OR playerRef.seek())
+  // completes. Whatever was being tracked is now a finished, genuine
+  // segment — flush it immediately (don't wait for the next 20s tick)
+  // via the same sender the interval above uses, then start fresh
+  // from wherever the seek landed. This is what makes drag/scrub
+  // jumps NOT count as watched time — the skipped range is never
+  // reported to the backend at all.
+  const handleSeek = (data: { currentTime: number; seekTime: number }) => {
+    flushSegment();
+    segmentStartRef.current = data.currentTime;
+    lastPositionRef.current = data.currentTime;
   };
 
   // NOTE: onPlaybackStateChanged is react-native-video's documented
@@ -105,7 +160,10 @@ export default function VideoPlayerScreen() {
     isPlayingRef.current = data.isPlaying;
   };
 
-  // IMA ad events: pause the watched-time timer for the ad's duration.
+  // IMA ad events: excluded from the watch-segment tracker for the ad's
+  // duration (see handleProgress's isAdPlaying gate) — content position
+  // doesn't move during the ad, so once it ends the same segment just
+  // continues, no seek/reset needed.
   const handleAdEvent = (event: { event: string }) => {
     if (event.event === "STARTED") setIsAdPlaying(true);
     if (["COMPLETED", "SKIPPED", "ALL_ADS_COMPLETED", "ERROR"].includes(event.event)) {
@@ -158,6 +216,7 @@ export default function VideoPlayerScreen() {
         paused={false}
         onLoad={handleLoad}
         onProgress={handleProgress}
+        onSeek={handleSeek}
         onPlaybackStateChanged={handlePlaybackStateChanged}
         onReceiveAdEvent={handleAdEvent}
         onError={(e) => setError(JSON.stringify(e))}

@@ -7,6 +7,7 @@ import TicketingScreen from "@/screens/TicketingScreen";
 import MyListScreen from "@/screens/MyListScreen";
 import ArchiveScreen from "@/screens/ArchiveScreen";
 import CategoriesScreen from "@/screens/CategoriesScreen";
+import { useSubscriptionAccess } from "@/hooks/useSubscriptionAccess";
 import { COLORS, ELEVATION, TYPE } from "@/theme";
 
 const Tab = createBottomTabNavigator();
@@ -15,6 +16,13 @@ const Tab = createBottomTabNavigator();
 // profile avatar now lives in AppHeader (top-right) instead of being a
 // 6th bottom-tab item, so this navigator only has real destinations.
 export default function MainTabs() {
+  const { hasPlay, hasArchive } = useSubscriptionAccess();
+  // An Archive-only plan (no Play access) should land the person on
+  // Archive when they tap Home — there is nothing for them on the
+  // Play screen otherwise. Every other case (Both, Play-only, no
+  // active subscription) keeps Home as Play, unchanged.
+  const HomeComponent = hasArchive && !hasPlay ? ArchiveScreen : PlaysBrowseScreen;
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -34,7 +42,7 @@ export default function MainTabs() {
     >
       <Tab.Screen
         name="Home"
-        component={PlaysBrowseScreen}
+        component={HomeComponent}
         options={{
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "home" : "home-outline"} size={26} color={color} />

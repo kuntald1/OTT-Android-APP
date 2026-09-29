@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import ShareLib from "react-native-share";
+import { captureRef } from "react-native-view-shot";
 import * as FileSystem from "expo-file-system/legacy";
 import { useRoute } from "@react-navigation/native";
 import {
@@ -48,6 +49,15 @@ export default function BlogDetailScreen() {
   const [posting, setPosting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Off-screen composite view used to "bake" a Read-more link band onto
+  // the shared cover image (see buildShareImage below). This replaces
+  // react-native-share's attributionURL link-sticker option, which is
+  // widely reported as unreliable on Android — a baked-in band always
+  // shows, platform-bug-free, at the cost of not being tappable.
+  const captureViewRef = useRef<View>(null);
+  const [captureSource, setCaptureSource] = useState<string | null>(null);
+  const imageLoadResolveRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -122,12 +132,13 @@ export default function BlogDetailScreen() {
     Linking.openURL(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`);
   };
 
-  // Downloads the remote cover image to a local file, then reads it as
-  // base64 — required for react-native-share's Stories sharing on Android
-  // when enableBase64ShareAndroid is set (a plain file:// path silently
-  // fails to launch the Stories composer, per multiple real-world reports
-  // for this exact library).
-  const getLocalCoverImage = async (): Promise<{ uri: string } | { error: string }> => {
+  // Downloads the remote cover image, renders it into the hidden capture
+  // view below with the "Read more" link band baked on top, snapshots
+  // that composite to a JPEG, then reads it as base64 — required for
+  // react-native-share's Stories sharing on Android (a plain file://
+  // path silently fails to launch the Stories composer, per multiple
+  // real-world reports for this exact library).
+  const buildShareImage = async (): Promise<{ uri: string } | { error: string }> => {
     const remoteUrl = blog?.cover_image_url ? resolveMediaUrl(blog.cover_image_url) : null;
     if (!remoteUrl) return { error: "This post has no cover_image_url set." };
     try {
@@ -136,17 +147,29 @@ export default function BlogDetailScreen() {
       if (downloadResult.status !== 200) {
         return { error: `Cover image download returned HTTP ${downloadResult.status} for ${remoteUrl}` };
       }
-      const base64 = await FileSystem.readAsStringAsync(localPath, {
+      // Wait for the hidden view to actually paint the freshly-downloaded
+      // image before snapshotting it — capturing too early produces a
+      // blank/stale composite.
+      await new Promise<void>((resolve) => {
+        imageLoadResolveRef.current = resolve;
+        setCaptureSource(localPath);
+      });
+      const compositePath = await captureRef(captureViewRef, {
+        format: "jpg",
+        quality: 0.92,
+        result: "tmpfile",
+      });
+      const base64 = await FileSystem.readAsStringAsync(compositePath, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      return { uri: Platform.OS === "android" ? `data:image/jpeg;base64,${base64}` : localPath };
+      return { uri: Platform.OS === "android" ? `data:image/jpeg;base64,${base64}` : compositePath };
     } catch (err: any) {
       return { error: `${err?.message || err} (url: ${remoteUrl})` };
     }
   };
 
   const shareToFacebookStory = async () => {
-    const cover = await getLocalCoverImage();
+    const cover = await buildShareImage();
     if ("error" in cover) {
       Alert.alert("Couldn't prepare cover image", `${cover.error} — falling back to a normal Facebook post.`);
       shareToFacebook();
@@ -159,6 +182,12 @@ export default function BlogDetailScreen() {
         backgroundTopColor: "#5E0018",
         backgroundBottomColor: "#241014",
         social: ShareLib.Social.FACEBOOK_STORIES,
+        type: "image/jpeg",
+        // Required on Android API 30+ (scoped storage) for the base64
+        // backgroundImage to actually attach — without it Android silently
+        // fails to make the image accessible to Facebook, and the Story
+        // composer opens with just the background color, no image.
+        useInternalStorage: true,
       } as any);
       if (result && (result as any).success === false) {
         Alert.alert("Facebook Story sharing didn't complete", JSON.stringify(result));
@@ -173,7 +202,7 @@ export default function BlogDetailScreen() {
   // Stories sharing (with a background image) IS an officially supported
   // Meta feature via react-native-share, using the same Facebook App ID.
   const shareToInstagramStory = async () => {
-    const cover = await getLocalCoverImage();
+    const cover = await buildShareImage();
     if ("error" in cover) {
       Alert.alert("Couldn't prepare cover image", `${cover.error} — opening Instagram normally instead.`);
       Linking.openURL("instagram://app").catch(() => Linking.openURL("https://www.instagram.com/"));
@@ -186,6 +215,11 @@ export default function BlogDetailScreen() {
         backgroundTopColor: "#5E0018",
         backgroundBottomColor: "#241014",
         social: ShareLib.Social.INSTAGRAM_STORIES,
+        type: "image/jpeg",
+        // Same Android API 30+ scoped-storage requirement as the Facebook
+        // call above — without this, Android can't resolve the image for
+        // Instagram either, so it falls back to a generic "Open with" chooser.
+        useInternalStorage: true,
       } as any);
       if (result && (result as any).success === false) {
         Alert.alert("Instagram Story sharing didn't complete", JSON.stringify(result));
@@ -221,6 +255,32 @@ export default function BlogDetailScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {/* Hidden off-screen composite used only to bake the "Read more" band
+          onto the shared image (see buildShareImage) — never visible to
+          the user, stays mounted so captureRef always has a real,
+          laid-out view to snapshot. */}
+      <View style={styles.captureHidden} pointerEvents="none">
+        <View ref={captureViewRef} collapsable={false} style={styles.captureCard}>
+          {captureSource && (
+            <Image
+              source={{ uri: captureSource }}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+              onLoadEnd={() => {
+                // Give the native view one extra frame to actually paint
+                // the image before we snapshot it.
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => imageLoadResolveRef.current?.());
+                });
+              }}
+            />
+          )}
+          <View style={styles.captureLinkBand}>
+            <Text style={styles.captureLinkText}>Read more: movixa.duckdns.org</Text>
+          </View>
+        </View>
+      </View>
+
       <ScrollView style={styles.scroll}>
         {blog.cover_image_url && (
           <Image
@@ -378,4 +438,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   commentSendText: { color: COLORS.ctaText, fontSize: 13, fontWeight: "700" },
+  captureHidden: { position: "absolute", top: -10000, left: -10000 },
+  captureCard: { width: 360, height: 640, backgroundColor: "#000", overflow: "hidden" },
+  captureLinkBand: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  captureLinkText: { color: "#fff", fontSize: 14, fontWeight: "700", textAlign: "center" },
 });

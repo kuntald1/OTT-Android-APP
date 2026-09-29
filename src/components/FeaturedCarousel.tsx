@@ -102,7 +102,7 @@ export default function FeaturedCarousel({
                 style={StyleSheet.absoluteFill}
               />
 
-              {video.categories[0] && (
+              {video.categories && video.categories[0] && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{video.categories[0]}</Text>
                 </View>

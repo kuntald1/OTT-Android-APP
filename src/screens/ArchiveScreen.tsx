@@ -11,9 +11,10 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { fetchArchive, fetchLanguages, fetchStudios, fetchVideosByLanguage, LanguageOption, StudioOption } from "@/api/videos";
+import { fetchArchive, fetchPlays, fetchLanguages, fetchStudios, fetchVideosByLanguage, fetchSpecialCategories, LanguageOption, StudioOption, SpecialCategory } from "@/api/videos";
 import { fetchArchiveHeroSlides, ArchiveHeroSlide } from "@/api/archive";
 import { resolveMediaUrl } from "@/api/apiClient";
+import { onSubscriptionChanged } from "@/hooks/useSubscriptionAccess";
 import { Video } from "@/types";
 import { COLORS, ELEVATION, SPACING, TYPE } from "@/theme";
 import AppHeader from "@/components/AppHeader";
@@ -27,28 +28,19 @@ const SLIDE_INTERVAL_MS = 5000;
 // hero carousel) instead of a near-full-screen height — much shorter than
 // before, per explicit feedback that the old height (65% of screen) was
 // too tall.
-const HERO_HEIGHT = Dimensions.get("window").width * 0.55;
-
-function groupByCategory(videos: Video[]): { category: string; videos: Video[] }[] {
-  const order: string[] = [];
-  const map = new Map<string, Video[]>();
-  for (const video of videos) {
-    for (const category of video.categories) {
-      if (!map.has(category)) {
-        map.set(category, []);
-        order.push(category);
-      }
-      map.get(category)!.push(video);
-    }
-  }
-  return order.map((category) => ({ category, videos: map.get(category)! }));
-}
+const HERO_HEIGHT = Dimensions.get("window").width * 0.78;
 
 // Archive keeps its own sepia-bronze sub-theme — intentionally distinct
 // from the burgundy of the rest of the app, for a vintage feel.
 export default function ArchiveScreen() {
   const navigation = useNavigation<any>();
   const [videos, setVideos] = useState<Video[]>([]);
+  // See PlaysBrowseScreen.tsx's identical field for why this exists —
+  // a Section Wise Video row here can legitimately contain a Play
+  // video, and resolveFullVideo below needs somewhere to find its real
+  // has_access/categories/languages when that happens. Never rendered
+  // as its own row.
+  const [otherSectionVideos, setOtherSectionVideos] = useState<Video[]>([]);
   const [slides, setSlides] = useState<ArchiveHeroSlide[]>([]);
   const [slideIndex, setSlideIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -57,6 +49,7 @@ export default function ArchiveScreen() {
   const [query, setQuery] = useState("");
   const [languages, setLanguages] = useState<LanguageOption[]>([]);
   const [studios, setStudios] = useState<StudioOption[]>([]);
+  const [specialCategories, setSpecialCategories] = useState<SpecialCategory[]>([]);
   const [loadingLanguage, setLoadingLanguage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -81,6 +74,16 @@ export default function ArchiveScreen() {
     } catch {
       setStudios([]);
     }
+    try {
+      setSpecialCategories(await fetchSpecialCategories("archive"));
+    } catch {
+      setSpecialCategories([]);
+    }
+    try {
+      setOtherSectionVideos(await fetchPlays());
+    } catch {
+      setOtherSectionVideos([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -90,6 +93,10 @@ export default function ArchiveScreen() {
       setLoading(false);
     })();
   }, [load]);
+
+  // Refresh access flags (lock badges) right after a subscription change —
+  // silently (no spinner), so the scroll position stays put.
+  useEffect(() => onSubscriptionChanged(() => { load(); }), [load]);
 
   useEffect(() => {
     if (slides.length <= 1) return;
@@ -105,14 +112,38 @@ export default function ArchiveScreen() {
     setRefreshing(false);
   };
 
-  const sections = useMemo(
+  const filtered = useMemo(
     () =>
-      groupByCategory(
-        query.trim()
-          ? videos.filter((v) => v.title.toLowerCase().includes(query.trim().toLowerCase()))
-          : videos
-      ),
+      query.trim()
+        ? videos.filter((v) => v.title.toLowerCase().includes(query.trim().toLowerCase()))
+        : videos,
     [videos, query]
+  );
+  const searching = !!query.trim();
+
+  // Same split as Play (see PlaysBrowseScreen.tsx) — dated Special
+  // Categories render first as a banner; permanent ones ("Section Wise
+  // Video" in Admin) replace what used to be auto-generated per-
+  // category rows. Each entry is resolved against the full `videos`
+  // list to get real has_access/categories/etc. — the special-
+  // categories endpoint's own video shape is too minimal for that (see
+  // PlaysBrowseScreen.tsx's identical resolveFullVideo for why this
+  // matters: without it every card here shows a lock badge regardless
+  // of actual access, and opening one crashes on missing categories).
+  const resolveFullVideo = useCallback(
+    (minimal: Video) =>
+      videos.find((v) => v.id === minimal.id) ||
+      otherSectionVideos.find((v) => v.id === minimal.id) ||
+      minimal,
+    [videos, otherSectionVideos]
+  );
+  const datedSpecials = useMemo(
+    () => specialCategories.filter((sc) => sc.visible_from).map((sc) => ({ ...sc, videos: sc.videos.map(resolveFullVideo) })),
+    [specialCategories, resolveFullVideo]
+  );
+  const permanentSpecials = useMemo(
+    () => specialCategories.filter((sc) => !sc.visible_from).map((sc) => ({ ...sc, videos: sc.videos.map(resolveFullVideo) })),
+    [specialCategories, resolveFullVideo]
   );
 
   const activeSlide = slides[slideIndex];
@@ -121,7 +152,7 @@ export default function ArchiveScreen() {
     navigation.navigate("VideoDetail", {
       video: item,
       relatedVideos: videos.filter(
-        (v) => v.id !== item.id && v.categories.some((c) => item.categories.includes(c))
+        (v) => v.id !== item.id && (v.categories || []).some((c) => (item.categories || []).includes(c))
       ),
     });
 
@@ -199,58 +230,78 @@ export default function ArchiveScreen() {
             </View>
           )}
 
-          {sections.length === 0 && (
-            <View style={styles.center}>
-              <Text style={styles.errorText}>Nothing found</Text>
-            </View>
-          )}
-
-          {sections.map(({ category, videos: categoryVideos }) => (
-            <View key={category} style={styles.section}>
-              <SectionHeader title={category} count={categoryVideos.length} />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.row}
-              >
-                {categoryVideos.map((item) => (
-                  <ArchiveCompactCard key={item.id} video={item} onPress={() => goToDetail(item)} />
-                ))}
-              </ScrollView>
-            </View>
-          ))}
-
-          {languages.length > 0 && !query.trim() && (
+          {searching ? (
             <View style={styles.section}>
-              <SectionHeader title="Popular Languages" />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-                {languages.map((l) => (
-                  <BrowseTile
-                    key={l.language}
-                    label={l.language}
-                    posterUrl={l.poster_image_url || undefined}
-                    loading={loadingLanguage === l.language}
-                    onPress={() => openLanguage(l.language)}
-                  />
-                ))}
-              </ScrollView>
+              <SectionHeader title="Search Results" count={filtered.length} />
+              {filtered.length === 0 ? (
+                <View style={styles.center}>
+                  <Text style={styles.errorText}>Nothing found</Text>
+                </View>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                  {filtered.map((item) => (
+                    <ArchiveCompactCard key={item.id} video={item} onPress={() => goToDetail(item)} />
+                  ))}
+                </ScrollView>
+              )}
             </View>
-          )}
+          ) : (
+            <>
+              {datedSpecials.map((sc) => (
+                <View key={sc.id} style={styles.section}>
+                  <SectionHeader title={sc.title} count={sc.videos.length} />
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                    {sc.videos.map((item) => (
+                      <ArchiveCompactCard key={item.id} video={item} onPress={() => goToDetail(item)} />
+                    ))}
+                  </ScrollView>
+                </View>
+              ))}
 
-          {studios.length > 0 && !query.trim() && (
-            <View style={styles.section}>
-              <SectionHeader title="Studios" />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-                {studios.map((s) => (
-                  <BrowseTile
-                    key={s.user_id}
-                    label={s.name}
-                    posterUrl={s.poster_image_url || undefined}
-                    onPress={() => openStudio(s)}
-                  />
-                ))}
-              </ScrollView>
-            </View>
+              {permanentSpecials.map((sc) => (
+                <View key={sc.id} style={styles.section}>
+                  <SectionHeader title={sc.title} count={sc.videos.length} />
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                    {sc.videos.map((item) => (
+                      <ArchiveCompactCard key={item.id} video={item} onPress={() => goToDetail(item)} />
+                    ))}
+                  </ScrollView>
+                </View>
+              ))}
+
+              {languages.length > 0 && (
+                <View style={styles.section}>
+                  <SectionHeader title="Popular Languages" />
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                    {languages.map((l) => (
+                      <BrowseTile
+                        key={l.language}
+                        label={l.language}
+                        posterUrl={l.poster_image_url || undefined}
+                        loading={loadingLanguage === l.language}
+                        onPress={() => openLanguage(l.language)}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {studios.length > 0 && (
+                <View style={styles.section}>
+                  <SectionHeader title="Studios" />
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+                    {studios.map((s) => (
+                      <BrowseTile
+                        key={s.user_id}
+                        label={s.name}
+                        posterUrl={s.poster_image_url || undefined}
+                        onPress={() => openStudio(s)}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       )}
@@ -271,8 +322,7 @@ const styles = StyleSheet.create({
   errorText: { ...TYPE.body, color: COLORS.textMuted },
   hero: {
     height: HERO_HEIGHT,
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.sm,
+    marginTop: 0,
     borderRadius: 24,
     overflow: "hidden",
     justifyContent: "flex-end",

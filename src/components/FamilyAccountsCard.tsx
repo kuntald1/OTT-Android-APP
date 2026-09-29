@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SubAccount, fetchMySubAccounts, createSubAccount, deactivateSubAccount } from "@/api/subAccounts";
+import { extractErrorMessage } from "@/api/apiClient";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 
 export default function FamilyAccountsCard() {
@@ -11,6 +12,12 @@ export default function FamilyAccountsCard() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // The parent's declaration, required before a sub-account can be created
+  // (backend rejects the request without it) — null means "not yet
+  // chosen". See SubAccount's is_minor docstring: an adult-declared
+  // sub-account fills in its own date of birth/city on its own first
+  // login; a minor never does, and this can't be changed later.
+  const [isMinor, setIsMinor] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -34,16 +41,21 @@ export default function FamilyAccountsCard() {
       Alert.alert("Missing info", "Name, email, and a password of at least 8 characters are required.");
       return;
     }
+    if (isMinor === null) {
+      Alert.alert("One more thing", "Please say whether this account is for someone under 18.");
+      return;
+    }
     setSaving(true);
     try {
-      const created = await createSubAccount({ name: name.trim(), email: email.trim(), password });
+      const created = await createSubAccount({ name: name.trim(), email: email.trim(), password, isMinor });
       setSubAccounts((prev) => [...prev, created]);
       setAdding(false);
       setName("");
       setEmail("");
       setPassword("");
-    } catch {
-      Alert.alert("Couldn't add account", "Something went wrong creating this account. Please try again.");
+      setIsMinor(null);
+    } catch (e: any) {
+      Alert.alert("Couldn't add account", extractErrorMessage(e, "Something went wrong creating this account. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -86,6 +98,11 @@ export default function FamilyAccountsCard() {
               <View style={styles.accountNameRow}>
                 <Text style={styles.accountName}>{account.name}</Text>
                 {!account.is_active && <Text style={styles.deactivatedTag}>DEACTIVATED</Text>}
+                {account.is_active && (
+                  <Text style={account.is_minor ? styles.minorTag : styles.adultTag}>
+                    {account.is_minor ? "MINOR" : "ADULT"}
+                  </Text>
+                )}
               </View>
               <Text style={styles.accountEmail}>{account.email}</Text>
             </View>
@@ -124,10 +141,38 @@ export default function FamilyAccountsCard() {
             secureTextEntry
             placeholderTextColor={COLORS.textFaint}
           />
+
+          <Text style={styles.questionLabel}>Is this account for someone under 18?</Text>
+          <View style={styles.minorToggleRow}>
+            <TouchableOpacity
+              style={[styles.minorOption, isMinor === true && styles.minorOptionActive]}
+              onPress={() => setIsMinor(true)}
+            >
+              <Text style={[styles.minorOptionText, isMinor === true && styles.minorOptionTextActive]}>
+                Yes, under 18
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.minorOption, isMinor === false && styles.minorOptionActive]}
+              onPress={() => setIsMinor(false)}
+            >
+              <Text style={[styles.minorOptionText, isMinor === false && styles.minorOptionTextActive]}>
+                No, 18 or older
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.minorHelperText}>
+            {isMinor === true
+              ? "This account will never be asked for date of birth or city."
+              : isMinor === false
+              ? "This account will be asked to add its own date of birth and city the first time it logs in."
+              : "This can't be changed later, so please choose carefully."}
+          </Text>
+
           <View style={styles.addFormActions}>
             <TouchableOpacity
               style={styles.cancelButton}
-              onPress={() => setAdding(false)}
+              onPress={() => { setAdding(false); setIsMinor(null); }}
               disabled={saving}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -168,6 +213,8 @@ const styles = StyleSheet.create({
   accountNameRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm },
   accountName: { ...TYPE.body, color: COLORS.cream, fontWeight: "700" },
   deactivatedTag: { ...TYPE.overline, color: COLORS.textFaint },
+  minorTag: { ...TYPE.overline, color: COLORS.textMuted },
+  adultTag: { ...TYPE.overline, color: COLORS.gold },
   accountEmail: { ...TYPE.caption, color: COLORS.textMuted, marginTop: 2 },
   deactivateLink: { ...TYPE.caption, color: COLORS.burgundyLight },
   addButton: {
@@ -192,6 +239,20 @@ const styles = StyleSheet.create({
   addFormActions: { flexDirection: "row", justifyContent: "flex-end", gap: SPACING.sm },
   cancelButton: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
   cancelButtonText: { ...TYPE.label, color: COLORS.textMuted },
+  questionLabel: { ...TYPE.caption, color: COLORS.textMuted, marginBottom: SPACING.xs },
+  minorToggleRow: { flexDirection: "row", gap: SPACING.sm, marginBottom: SPACING.xs },
+  minorOption: {
+    flex: 1,
+    borderRadius: RADIUS.sm,
+    paddingVertical: SPACING.sm,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+  },
+  minorOptionActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
+  minorOptionText: { ...TYPE.caption, color: COLORS.textMuted, fontWeight: "700" },
+  minorOptionTextActive: { color: COLORS.ctaText },
+  minorHelperText: { ...TYPE.caption, color: COLORS.textFaint, marginBottom: SPACING.md },
   saveAccountButton: {
     backgroundColor: COLORS.gold,
     borderRadius: RADIUS.pill,

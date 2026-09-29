@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 import { useAuth } from "@/context/AuthContext";
+import { useSubscriptionAccess } from "@/hooks/useSubscriptionAccess";
 import ProfileMenuModal from "@/components/ProfileMenuModal";
 
 // theomy wordmark, a search icon that expands into an input, and a
@@ -22,6 +23,7 @@ export default function AppHeader({
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { hasPlay, hasArchive } = useSubscriptionAccess();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
@@ -88,14 +90,16 @@ export default function AppHeader({
             </View>
           </View>
 
-          {showSwitcher && (
+          {showSwitcher && (hasPlay || hasArchive) && (
             <View style={styles.switcherRow}>
-              {renderPill("Play", activeRoute === "Plays", () =>
-                navigation.navigate("MainTabs", { screen: "Home" })
-              )}
-              {renderPill("Archive", activeRoute === "Archive", () =>
-                navigation.navigate("MainTabs", { screen: "ArchiveTab" })
-              )}
+              {hasPlay &&
+                renderPill("Play", activeRoute === "Plays", () =>
+                  navigation.navigate("MainTabs", { screen: "Home" })
+                )}
+              {hasArchive &&
+                renderPill("Archive", activeRoute === "Archive", () =>
+                  navigation.navigate("MainTabs", { screen: "ArchiveTab" })
+                )}
             </View>
           )}
         </>

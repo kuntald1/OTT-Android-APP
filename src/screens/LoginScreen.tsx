@@ -13,12 +13,11 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import RNVideo from "react-native-video";
 import { useAuth } from "@/context/AuthContext";
 import { COLORS } from "@/theme/colors";
-import { fetchPageHero } from "@/api/content";
-import { resolveMediaUrl } from "@/api/apiClient";
+import { extractErrorMessage } from "@/api/apiClient";
 import SocialLoginRow from "@/components/SocialLoginRow";
+import GradientBackground from "@/components/GradientBackground";
 
 const EXPO_OUT = Easing.bezier(0.16, 1, 0.3, 1);
 
@@ -113,22 +112,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [heroVideoUrl, setHeroVideoUrl] = useState<string | undefined>();
-  const [headline, setHeadline] = useState("Stream stories worth staying up for");
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const hero = await fetchPageHero("plays");
-        setHeadline(hero.headline || headline);
-        const firstVideo = hero.media?.[0]?.media_url;
-        setHeroVideoUrl(resolveMediaUrl(firstVideo));
-      } catch {
-        // Hero content is decorative — a failed fetch just means no
-        // background video, the plain burgundy background still works.
-      }
-    })();
-  }, []);
 
   const formStyle = useSlideIn(200);
 
@@ -142,28 +125,15 @@ export default function LoginScreen() {
     try {
       await login(email, password);
     } catch (e: any) {
-      const detail = e?.response?.data?.detail;
-      setError(detail || "Login failed");
+      setError(extractErrorMessage(e, "Login failed"));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <View style={styles.root}>
-      {heroVideoUrl && (
-        <RNVideo
-          source={{ uri: heroVideoUrl }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-          muted
-          repeat
-          paused={false}
-        />
-      )}
-      <View style={styles.overlay} />
-
-      <Text style={[styles.brandMark, { top: insets.top + 16 }]}>theomy</Text>
+    <GradientBackground style={styles.root}>
+      <Text style={[styles.brandMark, { top: insets.top + 16 }]}>THEOMY</Text>
 
       <KeyboardAvoidingView
         style={styles.content}
@@ -223,23 +193,18 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </Animated.View>
       </KeyboardAvoidingView>
-    </View>
+    </GradientBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.background },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(36, 0, 7, 0.72)", // COLORS.burgundyDark w/ opacity
-  },
+  root: { flex: 1 },
   brandMark: {
     position: "absolute",
     left: 20,
     color: COLORS.gold,
     fontSize: 22,
     fontWeight: "800",
-    textTransform: "uppercase",
     zIndex: 10,
   },
   content: {

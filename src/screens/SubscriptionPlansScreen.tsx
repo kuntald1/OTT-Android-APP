@@ -20,6 +20,7 @@ import {
   fetchSubscriptionDurations,
   fetchSubscriptionPlans,
   fetchMySubscriptions,
+  fetchMyActiveSubscription,
   fetchMyPayments,
   fetchMyVideoPurchases,
   fetchTaxConfig,
@@ -28,7 +29,9 @@ import {
   RazorpayOrder,
 } from "@/api/subscriptions";
 import { resolveMediaUrl } from "@/api/apiClient";
+import { fetchMyParentAccount } from "@/api/subAccounts";
 import { useAuth } from "@/context/AuthContext";
+import { notifySubscriptionChanged } from "@/hooks/useSubscriptionAccess";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 import GradientBackground from "@/components/GradientBackground";
 import RazorpayCheckoutWebView from "@/components/RazorpayCheckoutWebView";
@@ -46,7 +49,60 @@ function monthlyPriceFor(plan: SubscriptionPlan, screens: number): number {
   return parseFloat(plan.base_price) + parseFloat(plan.per_extra_screen) * (screens - 1);
 }
 
+// A family sub-account shares its parent's plan and never buys or changes one
+// (the backend refuses it too). Every route to this screen — the menu, the
+// "Subscribe to Archive" box on a locked video — therefore ends here with a
+// clear message instead of a checkout. The real screen is unchanged below, as
+// SubscriptionPurchaseScreen.
 export default function SubscriptionPlansScreen() {
+  const { user } = useAuth();
+  if (user?.parent_id) return <ManagedPlanNotice />;
+  return <SubscriptionPurchaseScreen />;
+}
+
+function ManagedPlanNotice() {
+  const [parentName, setParentName] = useState("");
+  const [plan, setPlan] = useState<Subscription | null>(null);
+
+  useEffect(() => {
+    fetchMyParentAccount()
+      .then((res) => setParentName(res.parent_name || ""))
+      .catch(() => {});
+    // /subscriptions/me resolves to the PARENT's plan for a sub-account.
+    fetchMyActiveSubscription()
+      .then(setPlan)
+      .catch(() => {});
+  }, []);
+
+  const owner = parentName || "the main account holder";
+  return (
+    <GradientBackground style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={noticeStyles.card}>
+          <Text style={noticeStyles.title}>Your plan is managed by {owner}</Text>
+          <Text style={noticeStyles.body}>
+            This account shares {owner}'s plan, so plans can't be bought or changed here. To change the plan, ask {owner}.
+          </Text>
+          <Text style={plan ? noticeStyles.plan : noticeStyles.noPlan}>
+            {plan
+              ? `Current plan: ${plan.plan_name} · ${plan.duration_label} · ${plan.screens} screen${plan.screens === 1 ? "" : "s"}`
+              : "There's no active plan on the family account right now."}
+          </Text>
+        </View>
+      </ScrollView>
+    </GradientBackground>
+  );
+}
+
+const noticeStyles = StyleSheet.create({
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: SPACING.lg },
+  title: { ...TYPE.section, color: COLORS.cream, marginBottom: SPACING.sm },
+  body: { ...TYPE.body, color: COLORS.textMuted, marginBottom: SPACING.md },
+  plan: { ...TYPE.label, color: COLORS.gold },
+  noPlan: { ...TYPE.label, color: COLORS.textMuted },
+});
+
+function SubscriptionPurchaseScreen() {
   const { user } = useAuth();
   const [durations, setDurations] = useState<SubscriptionDuration[]>([]);
   const [selectedDurationId, setSelectedDurationId] = useState<string | null>(null);
@@ -149,6 +205,8 @@ export default function SubscriptionPlansScreen() {
       setRazorpayOrder(null);
       setCheckoutPlan(null);
       await refreshAfterPayment();
+      // Tell tabs/header/lists/detail screens (all still mounted) to refetch.
+      notifySubscriptionChanged();
       Alert.alert("Subscribed!", `You're now on the ${razorpayOrder.plan_name} plan.`);
     } catch {
       setRazorpayOrder(null);

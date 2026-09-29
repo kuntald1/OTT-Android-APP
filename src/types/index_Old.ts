@@ -16,9 +16,6 @@ export interface User {
   created_at?: string;
   profile_photo_url?: string | null;
   reward_points_balance?: number;
-  // Set only for a family sub-account (its parent's id). A sub-account shares
-  // its parent's plan and can't buy or change one.
-  parent_id?: string | null;
 }
 
 export interface AuthResponse {

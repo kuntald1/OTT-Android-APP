@@ -10,7 +10,11 @@ export async function login(email: string, password: string): Promise<AuthRespon
 }
 
 // Confirmed from a real network capture: POST /auth/otp/send
-// { phone, purpose: "login" | "registration" } -> { message }
+// { phone, purpose: "login" | "registration" } -> { message }.
+// Registration itself no longer uses this — see sendRegistrationEmailOtp
+// below (Admin decision, Sept 2026: WhatsApp/phone OTP replaced by email
+// OTP for registration). This is now ONLY used by OTP LOGIN
+// ("Log in with OTP instead"), an existing account signing in — untouched.
 export async function sendOtp(
   phone: string,
   purpose: "login" | "registration"
@@ -18,6 +22,28 @@ export async function sendOtp(
   const { data } = await apiClient.post<{ message: string }>("/auth/otp/send", {
     phone,
     purpose,
+  });
+  return data;
+}
+
+// Email-based OTP for India registration (Admin decision, Sept 2026) —
+// replaces the old WhatsApp/phone OTP there. Phone is still collected and
+// required for India (see register() below) but is no longer itself
+// verified. Checks email — and phone/date_of_birth, when given — for an
+// existing account / under-18 date of birth BEFORE sending anything, so
+// that's caught right at "Send verification code" instead of only after
+// the person has received and typed back the email code. Mirrors the web
+// app's src/api.js sendRegistrationEmailOtp exactly.
+export async function sendRegistrationEmailOtp(
+  email: string,
+  phone?: string,
+  dateOfBirth?: string
+): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>("/auth/otp/send-email", {
+    email,
+    purpose: "registration",
+    phone: phone || null,
+    date_of_birth: dateOfBirth || null,
   });
   return data;
 }
@@ -39,12 +65,13 @@ export async function forgotPassword(email: string): Promise<{ message: string }
   return data;
 }
 
-// The web registration form (confirmed via screenshot) collects name, email,
-// password, country, phone, then sends an OTP (POST /auth/otp/send with
-// purpose:"registration" — confirmed) before final account creation.
-// The FINAL verify-and-create-account call's endpoint/shape is NOT confirmed
-// (no network capture of that last step) — this guesses it reuses
-// /auth/register with the otp attached. Correct this once captured.
+// The web registration form (confirmed via screenshot, and matched exactly
+// as of Sept 2026) collects name, email, password, country, phone, date of
+// birth, and — for India — city, then sends an email OTP
+// (sendRegistrationEmailOtp above) before final account creation. otp is
+// the code the person typed back. date_of_birth is required for every
+// registration (server rejects under-18); city is only meaningful — and
+// only sent — for India.
 export async function register(params: {
   name: string;
   email: string;
@@ -52,8 +79,19 @@ export async function register(params: {
   country: string;
   phone: string;
   otp: string;
+  dateOfBirth: string;
+  city?: string;
 }): Promise<AuthResponse> {
-  const { data } = await apiClient.post<AuthResponse>("/auth/register", params);
+  const { data } = await apiClient.post<AuthResponse>("/auth/register", {
+    name: params.name,
+    email: params.email,
+    password: params.password,
+    country: params.country,
+    phone: params.phone || null,
+    otp: params.otp,
+    date_of_birth: params.dateOfBirth,
+    city: params.country === "India" ? params.city || null : null,
+  });
   return data;
 }
 
@@ -101,6 +139,36 @@ export async function changePassword(
   const { data } = await apiClient.put<{ message: string }>("/auth/me/password", {
     old_password: oldPassword,
     new_password: newPassword,
+  });
+  return data;
+}
+
+// "Complete your profile" (date of birth + city) — mirrors the web app's
+// src/api.js fetchDemographicsStatus/completeDemographics exactly. Covers
+// every account that doesn't have both yet: an account created before
+// this feature shipped (any auth_provider), or a sub-account its parent
+// declared an ADULT at creation (see api/subAccounts.ts) filling in its
+// own details on its own first login. A declared-minor sub-account never
+// needs this — needs_profile is always false for it.
+export interface DemographicsStatus {
+  needs_profile: boolean;
+  is_declared_minor: boolean;
+  date_of_birth: string | null;
+  city: string | null;
+}
+
+export async function fetchDemographicsStatus(): Promise<DemographicsStatus> {
+  const { data } = await apiClient.get<DemographicsStatus>("/auth/me/demographics-status");
+  return data;
+}
+
+export async function completeDemographics(payload: {
+  dateOfBirth: string;
+  city?: string;
+}): Promise<DemographicsStatus> {
+  const { data } = await apiClient.put<DemographicsStatus>("/auth/me/demographics", {
+    date_of_birth: payload.dateOfBirth,
+    city: payload.city || null,
   });
   return data;
 }

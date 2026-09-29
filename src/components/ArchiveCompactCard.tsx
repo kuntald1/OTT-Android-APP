@@ -32,7 +32,17 @@ export default function ArchiveCompactCard({ video, onPress }: { video: Video; o
         ) : (
           <View style={[styles.poster, styles.fallback]} />
         )}
-        {!video.has_access && (
+        {/* Explicitly === false, not just falsy — a video resolved from
+            a Special Category row that couldn't be matched against
+            the currently-loaded list (e.g. it belongs to the other
+            section than the screen you're on) still comes through
+            with has_access simply UNKNOWN, not confirmed inaccessible.
+            Showing a lock badge on unknown access was actively wrong
+            (confirmed: "Prank Gone Wrong (Not Really)" showing locked
+            despite being playable) — real access is enforced anyway at
+            play-time via startPlaybackSession, so the badge is only
+            ever a hint, never the actual gate. */}
+        {video.has_access === false && (
           <View style={styles.lockChip}>
             <Text style={styles.lockChipText}>🔒</Text>
           </View>
@@ -48,7 +58,7 @@ export default function ArchiveCompactCard({ video, onPress }: { video: Video; o
         {video.title}
       </Text>
       <Text style={styles.meta} numberOfLines={1}>
-        {[video.release_year, video.languages[0]].filter(Boolean).join(" · ")}
+        {[video.release_year, video.languages && video.languages[0]].filter(Boolean).join(" · ")}
       </Text>
     </TouchableOpacity>
   );
