@@ -18,11 +18,14 @@ const SWITCH_ACCOUNT_ROUTE = "__SWITCH_ACCOUNT__";
 
 // Shown only for the "plays_organiser" role, matching the web app's profile
 // dropdown — placed after Help Center and before the user/logout block.
+// "My Live Events", "Revenue", and "Event Listing Enquiry" are commented
+// out (not deleted) per request — the screens/routes themselves still
+// exist and work, they're just not linked from this menu for now.
 const ORGANISER_MENU: { label: string; route: string }[] = [
-  { label: "My Video List", route: "MyVideoList" },
+  // { label: "My Video List", route: "MyVideoList" },
   { label: "My Live Events", route: "MyLiveEvents" },
-  { label: "Revenue", route: "Revenue" },
-  { label: "Event Listing Enquiry", route: "EventListingEnquiry" },
+  // { label: "Revenue", route: "Revenue" },
+  // { label: "Event Listing Enquiry", route: "EventListingEnquiry" },
 ];
 
 // Opened from the profile avatar in AppHeader's top-right corner — the
