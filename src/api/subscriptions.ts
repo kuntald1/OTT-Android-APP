@@ -153,3 +153,65 @@ export async function createRazorpayOrder(payload: {
   const { data } = await apiClient.post<RazorpayOrder>("/payments/razorpay/create-order", payload);
   return data;
 }
+
+// ---- UPI Autopay (auto-renew) -------------------------------------------
+// Backend: backend/app/routers/autopay.py. Opt-in, India only. The first
+// charge is authorised in the customer's UPI app; Razorpay then renews it and
+// reports every renewal to the SERVER by webhook (the app never sees those).
+
+export interface AutopaySetup {
+  autopay_id: string;
+  razorpay_subscription_id: string;
+  razorpay_key_id: string;
+  base_amount: string;
+  tax_amount: string;
+  total_amount: string;
+  currency: string;
+  plan_name: string;
+  duration_label: string;
+  screens: number;
+  cycle_months: number;
+}
+
+export interface AutopayStatus {
+  active: boolean;
+  plan_name?: string | null;
+  duration_label?: string | null;
+  screens?: number | null;
+  total_amount?: string | null;
+  // The real next-charge date (the server already removes its grace days).
+  next_renewal_at?: string | null;
+}
+
+export async function createAutopaySubscription(payload: {
+  plan_name: string;
+  duration_label: string;
+  screens: number;
+}): Promise<AutopaySetup> {
+  const { data } = await apiClient.post<AutopaySetup>("/payments/autopay/create", payload);
+  return data;
+}
+
+// activated:false = the signature was fine but Razorpay didn't (yet) report
+// the full first charge as captured; the server's webhook activates the plan
+// moments later, so this is not an error.
+export async function verifyAutopayPayment(payload: {
+  autopay_id: string;
+  razorpay_payment_id: string;
+  razorpay_subscription_id: string;
+  razorpay_signature: string;
+}): Promise<{ activated: boolean; payment_id?: string | null }> {
+  const { data } = await apiClient.post("/payments/autopay/verify", payload);
+  return data;
+}
+
+export async function fetchMyAutopay(): Promise<AutopayStatus> {
+  const { data } = await apiClient.get<AutopayStatus>("/payments/autopay/me");
+  return data;
+}
+
+// 204 No Content. Stops FUTURE charges only — the plan already paid for stays
+// active until its own expiry.
+export async function cancelMyAutopay(): Promise<void> {
+  await apiClient.post("/payments/autopay/cancel");
+}

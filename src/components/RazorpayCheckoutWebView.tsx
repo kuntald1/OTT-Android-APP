@@ -5,16 +5,23 @@ import { COLORS, SPACING, TYPE } from "@/theme";
 
 export interface RazorpaySuccessResult {
   razorpay_payment_id: string;
+  // "" for an auto-renew (subscription) checkout, which has no order.
   razorpay_order_id: string;
+  // Only set for an auto-renew (subscription) checkout.
+  razorpay_subscription_id?: string;
   razorpay_signature: string;
 }
 
 interface Props {
   visible: boolean;
   keyId: string;
-  orderId: string;
-  amountPaise: number;
-  currency: string;
+  // One-time payment: orderId + amountPaise + currency.
+  // Auto-renew (UPI Autopay): subscriptionId instead — the amount and billing
+  // cycle live on the Razorpay subscription itself, not in these options.
+  orderId?: string;
+  amountPaise?: number;
+  currency?: string;
+  subscriptionId?: string;
   name: string;
   description: string;
   prefillName?: string;
@@ -32,13 +39,15 @@ interface Props {
 // entirely, since that native module doesn't build under this app's New
 // Architecture setup.
 function buildHtml(props: Props): string {
+  const payment = props.subscriptionId
+    ? { subscription_id: props.subscriptionId }
+    : { amount: props.amountPaise, currency: props.currency, order_id: props.orderId };
+
   const safeOptions = {
     key: props.keyId,
-    amount: props.amountPaise,
-    currency: props.currency,
+    ...payment,
     name: props.name,
     description: props.description,
-    order_id: props.orderId,
     prefill: {
       name: props.prefillName || "",
       email: props.prefillEmail || "",
@@ -61,6 +70,7 @@ function buildHtml(props: Props): string {
         status: "success",
         razorpay_payment_id: response.razorpay_payment_id,
         razorpay_order_id: response.razorpay_order_id,
+        razorpay_subscription_id: response.razorpay_subscription_id,
         razorpay_signature: response.razorpay_signature
       }));
     };
@@ -86,7 +96,8 @@ export default function RazorpayCheckoutWebView(props: Props) {
       if (data.status === "success") {
         props.onSuccess({
           razorpay_payment_id: data.razorpay_payment_id,
-          razorpay_order_id: data.razorpay_order_id,
+          razorpay_order_id: data.razorpay_order_id || "",
+          razorpay_subscription_id: data.razorpay_subscription_id,
           razorpay_signature: data.razorpay_signature,
         });
       } else if (data.status === "dismissed") {
