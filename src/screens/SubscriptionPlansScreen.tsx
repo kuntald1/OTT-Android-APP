@@ -134,6 +134,7 @@ function SubscriptionPurchaseScreen() {
   const [autopaySetup, setAutopaySetup] = useState<AutopaySetup | null>(null);
   const [autopay, setAutopay] = useState<AutopayStatus | null>(null);
   const [cancellingAutopay, setCancellingAutopay] = useState(false);
+  const [showAllSubs, setShowAllSubs] = useState(false);
   const isIndia = user?.country === "India";
 
   const rewardBalance = user?.reward_points_balance || 0;
@@ -346,27 +347,18 @@ function SubscriptionPurchaseScreen() {
   return (
     <GradientBackground style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {subscriptions.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Subscriptions</Text>
-            {subscriptions.map((sub) => (
-              <View key={sub.id} style={styles.subCard}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.subPlanName}>{sub.plan_name}</Text>
-                  <Text style={styles.subMeta}>
-                    {sub.duration_label} · {sub.screens} screen{sub.screens === 1 ? "" : "s"} · ₹{sub.price}
-                  </Text>
-                  <Text style={styles.subExpiry}>
-                    {sub.is_active ? "Renews" : "Expired"} {new Date(sub.expires_at).toLocaleDateString()}
-                  </Text>
-                </View>
-                <View style={[styles.statusPill, sub.is_active ? styles.statusPillActive : styles.statusPillInactive]}>
-                  <Text style={styles.statusPillText}>{sub.is_active ? "Active" : "Inactive"}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
+        {(() => {
+          const current = subscriptions.find((x) => x.is_active);
+          return current ? (
+            <View style={styles.currentPlanStrip}>
+              <Text style={styles.currentPlanText}>
+                You're on the <Text style={{ fontWeight: "800" }}>{current.plan_name}</Text> plan —{" "}
+                {current.duration_label}, {current.screens} screen{current.screens === 1 ? "" : "s"}, active until{" "}
+                {new Date(current.expires_at).toLocaleDateString()}.
+              </Text>
+            </View>
+          ) : null;
+        })()}
 
         {autopay?.active && (
           <View style={styles.autopayCard}>
@@ -491,6 +483,36 @@ function SubscriptionPurchaseScreen() {
             );
           })}
         </View>
+
+        {subscriptions.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Your Subscription History</Text>
+            {(showAllSubs ? subscriptions : subscriptions.slice(0, 3)).map((sub) => (
+              <View key={sub.id} style={styles.subCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subPlanName}>{sub.plan_name}</Text>
+                  <Text style={styles.subMeta}>
+                    {sub.duration_label} · {sub.screens} screen{sub.screens === 1 ? "" : "s"} · ₹{sub.price}
+                  </Text>
+                  <Text style={styles.subExpiry}>
+                    {sub.is_active ? "Renews" : "Expired"} {new Date(sub.expires_at).toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={[styles.statusPill, sub.is_active ? styles.statusPillActive : styles.statusPillInactive]}>
+                  <Text style={styles.statusPillText}>{sub.is_active ? "Active" : "Inactive"}</Text>
+                </View>
+              </View>
+            ))}
+            {subscriptions.length > 3 && (
+              <TouchableOpacity style={styles.showAllButton} onPress={() => setShowAllSubs((v) => !v)}>
+                <Text style={styles.showAllText}>
+                  {showAllSubs ? "Show fewer" : `Show all ${subscriptions.length}`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
 
         {videoPurchases.length > 0 && (
           <View style={styles.section}>
@@ -831,6 +853,15 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     marginBottom: SPACING.xl,
   },
+  currentPlanStrip: {
+    backgroundColor: "rgba(76,175,125,0.12)",
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  currentPlanText: { ...TYPE.body, color: COLORS.cream },
+  showAllButton: { alignSelf: "center", paddingVertical: SPACING.sm, paddingHorizontal: SPACING.lg },
+  showAllText: { ...TYPE.label, color: COLORS.gold, fontWeight: "700" },
   autopayText: { ...TYPE.body, color: COLORS.gold },
   autopayCancel: {
     alignSelf: "flex-start",
