@@ -137,7 +137,8 @@ export default function CommunityScreen() {
               <CollapsibleSection
                 title="Blog"
                 summary={filteredBlogs.length > 0 ? `${filteredBlogs.length} posts · latest: ${filteredBlogs[0].title}` : "No posts yet"}
-                divider={false}
+                premium
+                icon="📝"
               >
                 {filteredBlogs.map((item) => (
                   <TouchableOpacity
@@ -173,6 +174,8 @@ export default function CommunityScreen() {
               <CollapsibleSection
                 title="Community Room"
                 summary={rooms.length > 0 ? `${rooms.length} rooms` : "No rooms yet"}
+                premium
+                icon="💬"
               >
                 {rooms.map((room) => (
                   <View key={room.id} style={styles.roomCard}>
@@ -199,7 +202,7 @@ export default function CommunityScreen() {
                 </TouchableOpacity>
               </CollapsibleSection>
 
-              <CollapsibleSection title="Support a Plays Organiser" summary="Donate to independent theatre programs">
+              <CollapsibleSection title="Support a Plays Organiser" summary="Donate to independent theatre programs" premium icon="🎭">
                 <View style={styles.organiserSection}>
                   <View style={styles.organiserIcon}>
                     <Text style={styles.roomIconText}>🎭</Text>
@@ -290,12 +293,12 @@ const styles = StyleSheet.create({
   heroEyebrow: { color: COLORS.gold, fontSize: 11, letterSpacing: 1.5, fontWeight: "700" },
   heroHeadline: { color: COLORS.cream, fontSize: 20, fontWeight: "800", marginTop: 4 },
   heroSubtext: { color: COLORS.cream, opacity: 0.85, fontSize: 12, marginTop: 4 },
+  // Each section is now its own premium card, so this is just a spaced
+  // column (previously one shared flat card).
   sectionsCard: {
     marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 14,
-    backgroundColor: COLORS.burgundyMuted,
-    overflow: "hidden",
+    marginTop: 18,
+    gap: 14,
   },
   blogCard: {
     flexDirection: "row",
@@ -305,7 +308,7 @@ const styles = StyleSheet.create({
     borderTopColor: "rgba(255,255,255,0.1)",
     gap: 12,
   },
-  blogCover: { width: 90, height: 90, borderRadius: 8, backgroundColor: COLORS.burgundyDark },
+  blogCover: { width: 90, height: 90, borderRadius: 12, backgroundColor: COLORS.burgundyDark },
   blogContent: { flex: 1 },
   blogTitle: { color: COLORS.cream, fontSize: 15, fontWeight: "700" },
   blogExcerpt: { color: COLORS.cream, opacity: 0.7, fontSize: 13, marginTop: 4 },

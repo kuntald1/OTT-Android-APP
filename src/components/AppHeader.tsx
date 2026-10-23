@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,7 +23,9 @@ export default function AppHeader({
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { hasPlay, hasArchive } = useSubscriptionAccess();
+  const { hasPlay, hasArchive, isSubscribed } = useSubscriptionAccess();
+  // Which pill the person tapped without having access (null = no alert).
+  const [lockedPill, setLockedPill] = useState<"Play" | "Archive" | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
@@ -90,20 +92,56 @@ export default function AppHeader({
             </View>
           </View>
 
-          {showSwitcher && (hasPlay || hasArchive) && (
+          {showSwitcher && (
+            // Both pills are always shown. Tapping one the person has no
+            // access to (no plan at all, or a plan without that section)
+            // opens the "subscribe?" alert instead of navigating.
             <View style={styles.switcherRow}>
-              {hasPlay &&
-                renderPill("Play", activeRoute === "Plays", () =>
-                  navigation.navigate("MainTabs", { screen: "Home" })
-                )}
-              {hasArchive &&
-                renderPill("Archive", activeRoute === "Archive", () =>
-                  navigation.navigate("MainTabs", { screen: "ArchiveTab" })
-                )}
+              {renderPill("Play", activeRoute === "Plays", () => {
+                if (isSubscribed === false || !hasPlay) setLockedPill("Play");
+                else navigation.navigate("MainTabs", { screen: "Home" });
+              })}
+              {renderPill("Archive", activeRoute === "Archive", () => {
+                if (isSubscribed === false || !hasArchive) setLockedPill("Archive");
+                else navigation.navigate("MainTabs", { screen: "ArchiveTab" });
+              })}
             </View>
           )}
         </>
       )}
+
+      <Modal visible={lockedPill !== null} transparent animationType="fade" onRequestClose={() => setLockedPill(null)}>
+        <View style={styles.alertBackdrop}>
+          <View style={styles.alertCard}>
+            <Text style={styles.alertTitle}>Subscription required</Text>
+            <Text style={styles.alertBody}>
+              {isSubscribed === false
+                ? `You don't have an active plan yet. Subscribe to watch ${lockedPill}.`
+                : `${lockedPill} isn't included in your current plan. View plans to get access?`}
+            </Text>
+            <View style={styles.alertButtons}>
+              <TouchableOpacity style={styles.alertNo} onPress={() => setLockedPill(null)}>
+                <Text style={styles.alertNoText}>Not now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setLockedPill(null);
+                  navigation.navigate("SubscriptionPlans");
+                }}
+              >
+                <LinearGradient
+                  colors={[COLORS.goldLight, COLORS.gold]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.alertYes}
+                >
+                  <Text style={styles.alertYesText}>Yes, view plans</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ProfileMenuModal visible={profileMenuVisible} onClose={() => setProfileMenuVisible(false)} />
     </View>
@@ -176,4 +214,13 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, color: COLORS.cream, paddingVertical: 8, fontSize: 14, marginLeft: 6 },
   closeSearchButton: { padding: 6 },
   closeSearchIcon: { color: COLORS.cream, fontSize: 16 },
+  alertBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center", padding: 28 },
+  alertCard: { width: "100%", maxWidth: 360, backgroundColor: "#2a0610", borderRadius: 18, padding: 22, borderWidth: 1, borderColor: "rgba(212,175,55,0.3)" },
+  alertTitle: { color: COLORS.cream, fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  alertBody: { color: COLORS.cream, opacity: 0.8, fontSize: 14, lineHeight: 20, marginBottom: 20 },
+  alertButtons: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 12 },
+  alertNo: { paddingHorizontal: 14, paddingVertical: 10 },
+  alertNoText: { color: COLORS.cream, opacity: 0.7, fontSize: 14, fontWeight: "600" },
+  alertYes: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: RADIUS.pill },
+  alertYesText: { color: COLORS.ctaText, fontSize: 14, fontWeight: "800" },
 });

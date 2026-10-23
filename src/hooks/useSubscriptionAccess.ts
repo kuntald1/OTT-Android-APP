@@ -46,11 +46,17 @@ export function useSubscriptionAccess() {
   const [hasPlay, setHasPlay] = useState(true);
   const [hasArchive, setHasArchive] = useState(true);
   const [loading, setLoading] = useState(true);
+  // true = has an active plan, false = confirmed NO plan, null = unknown
+  // (logged out / network error). Separate from hasPlay/hasArchive on
+  // purpose: those keep their "default to true" behaviour so tabs and
+  // lock badges are unchanged; only the Play/Archive pill alert reads this.
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) {
       setHasPlay(true);
       setHasArchive(true);
+      setIsSubscribed(null);
       setLoading(false);
       return;
     }
@@ -58,6 +64,7 @@ export function useSubscriptionAccess() {
     try {
       const sub = await fetchMyActiveSubscription();
       const planName = (sub?.plan_name || "").trim().toLowerCase();
+      setIsSubscribed(!!planName);
       if (planName === "play") {
         setHasPlay(true);
         setHasArchive(false);
@@ -68,9 +75,12 @@ export function useSubscriptionAccess() {
         setHasPlay(true);
         setHasArchive(true);
       }
-    } catch {
+    } catch (err: any) {
       setHasPlay(true);
       setHasArchive(true);
+      // 404 = the server says "no active subscription"; anything else
+      // (network, 500) is unknown, so don't block the person.
+      setIsSubscribed(err?.response?.status === 404 ? false : null);
     } finally {
       setLoading(false);
     }
@@ -84,5 +94,5 @@ export function useSubscriptionAccess() {
   // stay mounted) pick up the new plan without a logout/login.
   useEffect(() => onSubscriptionChanged(refresh), [refresh]);
 
-  return { hasPlay, hasArchive, loading, refresh };
+  return { hasPlay, hasArchive, isSubscribed, loading, refresh };
 }
