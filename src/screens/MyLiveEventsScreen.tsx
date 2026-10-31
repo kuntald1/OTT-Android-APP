@@ -18,6 +18,10 @@ import {
   fetchMyLiveEvents,
   MyLiveEvent,
 } from "@/api/liveEvents";
+import {
+  emptyLiveEventForm, formatLocalDate, formatLocalDateTime,
+  liveEventFormError, liveEventPayload, LiveEventForm,
+} from "@/utils/liveEventForm";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 import GradientBackground from "@/components/GradientBackground";
 
@@ -43,6 +47,11 @@ function errMsg(e: any, fallback = "Something went wrong. Please try again."): s
 }
 
 type Section = "play" | "archive" | "both";
+const ACCESS_OPTIONS: { value: "subscription" | "pay_per_stream"; label: string }[] = [
+  { value: "subscription", label: "Subscription" },
+  { value: "pay_per_stream", label: "Pay Per Streaming" },
+];
+
 const SECTIONS: { value: Section; label: string }[] = [
   { value: "both", label: "Both" },
   { value: "play", label: "Plays" },
@@ -58,7 +67,7 @@ export default function MyLiveEventsScreen() {
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [section, setSection] = useState<Section>("both");
+  const [form, setForm] = useState<LiveEventForm>(emptyLiveEventForm);
   const [creating, setCreating] = useState(false);
 
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
@@ -93,14 +102,19 @@ export default function MyLiveEventsScreen() {
       Alert.alert("Title needed", "Please enter a title for your live event.");
       return;
     }
+    const formError = liveEventFormError(form);
+    if (formError) {
+      Alert.alert("Check the form", formError);
+      return;
+    }
     setCreating(true);
     try {
-      const created = await createMyLiveEvent(title.trim(), description.trim(), section);
+      const created = await createMyLiveEvent(title.trim(), description.trim(), liveEventPayload(form));
       setEvents((prev) => [created, ...prev]);
       setRevealed((prev) => ({ ...prev, [created.id]: true }));
       setTitle("");
       setDescription("");
-      setSection("both");
+      setForm(emptyLiveEventForm());
       setShowForm(false);
     } catch (e) {
       Alert.alert("Couldn't create event", errMsg(e));
@@ -155,6 +169,7 @@ export default function MyLiveEventsScreen() {
   };
 
   const maskKey = (k: string) => "•".repeat(Math.min(k.length, 24));
+  const paid = form.monetization_type === "pay_per_stream";
 
   return (
     <GradientBackground style={styles.screen}>
@@ -192,17 +207,105 @@ export default function MyLiveEventsScreen() {
                 multiline
                 maxLength={2000}
               />
+              <Text style={styles.fieldLabel}>Shows on</Text>
               <View style={styles.chipRow}>
-                {SECTIONS.map((s) => (
+                {SECTIONS.map((s) => {
+                  const active = paid ? s.value === "both" : form.section === s.value;
+                  return (
+                    <TouchableOpacity
+                      key={s.value}
+                      style={[styles.chip, active && styles.chipActive, paid && styles.chipLocked]}
+                      disabled={paid}
+                      onPress={() => setForm((f) => ({ ...f, section: s.value }))}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{s.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {paid && (
+                <Text style={styles.fieldHint}>
+                  A paid show isn't tied to a plan, so it's listed in both sections.
+                </Text>
+              )}
+
+              <Text style={styles.fieldLabel}>Access</Text>
+              <View style={styles.chipRow}>
+                {ACCESS_OPTIONS.map((a) => (
                   <TouchableOpacity
-                    key={s.value}
-                    style={[styles.chip, section === s.value && styles.chipActive]}
-                    onPress={() => setSection(s.value)}
+                    key={a.value}
+                    style={[styles.chip, form.monetization_type === a.value && styles.chipActive]}
+                    onPress={() =>
+                      setForm((f) => ({
+                        ...f,
+                        monetization_type: a.value,
+                        // Switching to paid pins the section in the same tap,
+                        // so what's on screen matches what will be saved.
+                        section: a.value === "pay_per_stream" ? "both" : f.section,
+                      }))
+                    }
                   >
-                    <Text style={[styles.chipText, section === s.value && styles.chipTextActive]}>{s.label}</Text>
+                    <Text
+                      style={[
+                        styles.chipText,
+                        form.monetization_type === a.value && styles.chipTextActive,
+                      ]}
+                    >
+                      {a.label}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {paid && (
+                <View style={styles.fieldRow}>
+                  <View style={styles.fieldHalf}>
+                    <Text style={styles.fieldLabel}>Show price (₹)</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="199"
+                      placeholderTextColor={COLORS.textFaint}
+                      value={form.price_inr}
+                      onChangeText={(v) => setForm((f) => ({ ...f, price_inr: v }))}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={styles.fieldHalf}>
+                    <Text style={styles.fieldLabel}>Show price ($)</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="4.99"
+                      placeholderTextColor={COLORS.textFaint}
+                      value={form.price_usd}
+                      onChangeText={(v) => setForm((f) => ({ ...f, price_usd: v }))}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              )}
+
+              <Text style={styles.fieldLabel}>Show date &amp; time</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="02-11-2026 17:00"
+                placeholderTextColor={COLORS.textFaint}
+                value={form.scheduled_start_at}
+                onChangeText={(v) => setForm((f) => ({ ...f, scheduled_start_at: v }))}
+              />
+
+              <Text style={styles.fieldLabel}>Promote from</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="31-10-2026"
+                placeholderTextColor={COLORS.textFaint}
+                value={form.promo_from}
+                onChangeText={(v) => setForm((f) => ({ ...f, promo_from: v }))}
+              />
+              <Text style={styles.fieldHint}>
+                Leave both dates empty and the event appears only once it's actually broadcasting. Set them to
+                announce it in advance: it's listed from the promote date, showing the show time, but stays
+                unplayable until the broadcast really starts.
+              </Text>
               <View style={styles.formButtons}>
                 <TouchableOpacity style={styles.ghostBtn} onPress={() => setShowForm(false)} disabled={creating}>
                   <Text style={styles.ghostBtnText}>Cancel</Text>
@@ -294,6 +397,23 @@ export default function MyLiveEventsScreen() {
                     </TouchableOpacity>
                   </View>
 
+                  {/* What was set when the event was created — the app has
+                      no edit form, so this is the organiser's only way to
+                      confirm the schedule and price actually landed. */}
+                  <View style={styles.settingsRow}>
+                    <Text style={styles.settingsChip}>
+                      {ev.monetization_type === "pay_per_stream"
+                        ? `Ticketed${ev.price_inr ? ` · ₹${Number(ev.price_inr)}` : ""}`
+                        : `Subscription · ${ev.section === "both" ? "Plays + Archive" : ev.section === "archive" ? "Archive" : "Plays"}`}
+                    </Text>
+                    {!!formatLocalDateTime(ev.scheduled_start_at) && (
+                      <Text style={styles.settingsChip}>Show {formatLocalDateTime(ev.scheduled_start_at)}</Text>
+                    )}
+                    {!!formatLocalDate(ev.promo_from) && (
+                      <Text style={styles.settingsChip}>Promoted from {formatLocalDate(ev.promo_from)}</Text>
+                    )}
+                  </View>
+
                   {!live && (
                     <Text style={styles.ready}>
                       Ready to broadcast — start streaming from OBS using the details above. No need to create a new event.
@@ -362,7 +482,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   inputMulti: { minHeight: 70, textAlignVertical: "top" },
-  chipRow: { flexDirection: "row", gap: SPACING.sm },
+  settingsRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.md },
+  settingsChip: {
+    ...TYPE.caption,
+    color: COLORS.textMuted,
+    backgroundColor: COLORS.surfaceStrong,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+    overflow: "hidden",
+  },
+  fieldLabel: { ...TYPE.overline, color: COLORS.textFaint },
+  fieldHint: { ...TYPE.caption, color: COLORS.textFaint },
+  fieldRow: { flexDirection: "row", gap: SPACING.md },
+  fieldHalf: { flex: 1, gap: 4 },
+  chipLocked: { opacity: 0.55 },
+  chipRow: { flexDirection: "row", gap: SPACING.sm, flexWrap: "wrap" },
   chip: {
     paddingHorizontal: SPACING.md,
     paddingVertical: 6,

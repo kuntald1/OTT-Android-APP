@@ -11,7 +11,15 @@ import apiClient from "./apiClient";
 export interface MyLiveEvent {
   id: string;
   title: string;
-  status: string; // "idle" | "active"
+  description: string | null;
+  section: string;              // "play" | "archive" | "both"
+  status: string;               // "idle" | "active" | "ended"
+  monetization_type: string;    // "subscription" | "pay_per_stream"
+  price_inr: string | null;
+  price_usd: string | null;
+  scheduled_start_at: string | null;
+  promo_from: string | null;    // "YYYY-MM-DD"
+  is_disabled: boolean;
   rtmp_url: string;
   stream_key: string;
   playback_url: string;
@@ -22,15 +30,17 @@ export async function fetchMyLiveEvents(): Promise<MyLiveEvent[]> {
   return data;
 }
 
+// `extra` carries the scheduling/monetization half of the form — see
+// utils/liveEventForm.ts's liveEventPayload(), which builds it.
 export async function createMyLiveEvent(
   title: string,
   description: string,
-  section: "play" | "archive" | "both"
+  extra: Record<string, unknown> = {}
 ): Promise<MyLiveEvent> {
   const { data } = await apiClient.post<MyLiveEvent>("/videos/live", {
     title,
     description: description || null,
-    section,
+    ...extra,
   });
   return data;
 }
