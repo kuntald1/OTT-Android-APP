@@ -45,6 +45,16 @@ export async function createMyLiveEvent(
   return data;
 }
 
+// Organiser edits their OWN event — the server scopes it by
+// uploaded_by_user_id, and holds it to exactly the admin's rules.
+export async function updateMyLiveEvent(
+  id: string,
+  updates: Record<string, unknown>
+): Promise<MyLiveEvent> {
+  const { data } = await apiClient.put<MyLiveEvent>(`/videos/live/${id}`, updates);
+  return data;
+}
+
 export async function endMyLiveEvent(id: string): Promise<MyLiveEvent> {
   const { data } = await apiClient.post<MyLiveEvent>(`/videos/live/${id}/end`);
   return data;
