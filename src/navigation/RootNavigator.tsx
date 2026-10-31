@@ -19,6 +19,8 @@ import VideoPlayerScreen from "@/screens/VideoPlayerScreen";
 import PersonDetailScreen from "@/screens/PersonDetailScreen";
 import PlaceholderScreen from "@/screens/PlaceholderScreen";
 import MyLiveEventsScreen from "@/screens/MyLiveEventsScreen";
+import LiveEventsScreen from "@/screens/LiveEventsScreen";
+import LiveWatchScreen from "@/screens/LiveWatchScreen";
 import ManageProfileScreen from "@/screens/ManageProfileScreen";
 import WatchHistoryScreen from "@/screens/WatchHistoryScreen";
 import RequestOrganiserScreen from "@/screens/RequestOrganiserScreen";
@@ -67,6 +69,12 @@ function AppStack() {
         component={MainTabs}
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="LiveEvents"
+        component={LiveEventsScreen}
+        options={{ title: "Live & Upcoming" }}
+      />
+      <Stack.Screen name="LiveWatch" component={LiveWatchScreen} options={{ title: "Live" }} />
       <Stack.Screen name="BlogDetail" component={BlogDetailScreen} options={{ title: "" }} />
       <Stack.Screen name="Organisers" component={OrganisersScreen} options={{ title: "Organisers" }} />
       <Stack.Screen name="RoomDetail" component={RoomDetailScreen} options={{ title: "Room" }} />

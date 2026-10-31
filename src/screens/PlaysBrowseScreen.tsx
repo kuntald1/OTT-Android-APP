@@ -27,6 +27,7 @@ import { onSubscriptionChanged } from "@/hooks/useSubscriptionAccess";
 import { COLORS, SPACING, TYPE } from "@/theme";
 import AppHeader from "@/components/AppHeader";
 import GradientBackground from "@/components/GradientBackground";
+import LiveNowBanner from "@/components/LiveNowBanner";
 import FeaturedCarousel from "@/components/FeaturedCarousel";
 import SectionHeader from "@/components/SectionHeader";
 import MediaCard from "@/components/MediaCard";
@@ -184,6 +185,7 @@ export default function PlaysBrowseScreen() {
   return (
     <GradientBackground style={styles.screen}>
       <AppHeader activeRoute="Plays" onSearch={setQuery} showSwitcher />
+      <LiveNowBanner section="play" />
 
       {loading ? (
         <View style={styles.center}>

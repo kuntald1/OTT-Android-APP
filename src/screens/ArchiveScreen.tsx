@@ -19,6 +19,7 @@ import { Video } from "@/types";
 import { COLORS, ELEVATION, SPACING, TYPE } from "@/theme";
 import AppHeader from "@/components/AppHeader";
 import GradientBackground from "@/components/GradientBackground";
+import LiveNowBanner from "@/components/LiveNowBanner";
 import SectionHeader from "@/components/SectionHeader";
 import ArchiveCompactCard from "@/components/ArchiveCompactCard";
 import BrowseTile from "@/components/BrowseTile";
@@ -177,6 +178,7 @@ export default function ArchiveScreen() {
       glowColors={["rgba(212,162,68,0.14)", "rgba(212,162,68,0.22)"]}
     >
       <AppHeader activeRoute="Archive" onSearch={setQuery} showSwitcher />
+      <LiveNowBanner section="archive" />
 
       {loading ? (
         <View style={styles.center}>
