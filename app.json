@@ -32,9 +32,9 @@
       [
         "react-native-video",
         {
+          "enableADSExtension": true,
           "androidExtensions": {
-            "useExoplayerHls": true,
-            "useExoplayerIMA": true
+            "useExoplayerHls": true
           }
         }
       ],
