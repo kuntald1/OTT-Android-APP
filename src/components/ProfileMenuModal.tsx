@@ -9,6 +9,7 @@ const BASE_MENU: { label: string; route: string }[] = [
   { label: "Manage Profile", route: "ManageProfile" },
   { label: "Watch History", route: "WatchHistory" },
   { label: "Subscription Plans", route: "SubscriptionPlans" },
+  { label: "My Bookings", route: "MyBookings" },
   { label: "Help Center", route: "HelpCenter" },
 ];
 
