@@ -82,7 +82,9 @@ export function liveEventAction(ev?: LiveEventPublic | null): LiveAction {
     }
     if (ev.access_reason === "purchase_required") {
       const price = formatPrice(ev);
-      return { kind: "pay", label: price ? `Buy for ${price}` : "Buy to watch", hint, isLive: live };
+      // Tickets are sold on the website, so the label states the price
+    // rather than offering to sell. Opening the event explains where.
+    return { kind: "pay", label: price ? `Ticket — ${price}` : "Ticket needed", hint, isLive: live };
     }
     const where = SECTION_LABELS[ev.section] || "theomy";
     return { kind: "subscribe", label: `Subscribe to ${where}`, hint, isLive: live };

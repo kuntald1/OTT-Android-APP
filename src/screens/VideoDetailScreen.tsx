@@ -24,6 +24,7 @@ import { onSubscriptionChanged } from "@/hooks/useSubscriptionAccess";
 import { useAuth } from "@/context/AuthContext";
 import { CastMember, CrewMember, Video } from "@/types";
 import { COLORS } from "@/theme/colors";
+import { WEB_PURCHASE_NOTICE_VIDEO } from "@/utils/purchaseNotice";
 
 // video arrives via navigation params from PlaysBrowseScreen — the /videos
 // list endpoint already returns full detail, so there's no separate detail
@@ -260,15 +261,24 @@ export default function VideoDetailScreen() {
             a Play-only subscriber hitting an Archive video should be
             told exactly what to add ("Subscribe to Archive"), not left
             to guess which of the two plans covers it. */}
-        {video.has_access === false && (
+        {video.has_access === false && video.monetization_type === "pay_per_video" && (
+          <View style={styles.lockedBox}>
+            <Text style={styles.lockedText}>
+              {video.pricing
+                ? `₹${video.pricing.price_inr} needed to watch this video`
+                : "This video is bought on its own"}
+            </Text>
+            <Text style={styles.lockedNotice}>{WEB_PURCHASE_NOTICE_VIDEO}</Text>
+          </View>
+        )}
+
+        {video.has_access === false && video.monetization_type !== "pay_per_video" && (
           <TouchableOpacity
             style={styles.lockedBox}
             onPress={() => navigation.navigate("SubscriptionPlans")}
           >
             <Text style={styles.lockedText}>
-              {video.monetization_type === "pay_per_video" && video.pricing
-                ? `₹${video.pricing.price_inr} needed to watch this video`
-                : user?.parent_id
+              {user?.parent_id
                 // A sub-account can't buy a plan; the main account holder does.
                 ? `Ask the main account holder to add ${video.section === "archive" ? "Heritage" : video.section === "play" ? "Contemporary" : "a plan"} to watch this video`
                 : video.section === "archive"
@@ -428,6 +438,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   lockedText: { color: COLORS.gold, fontSize: 15 },
+  lockedNotice: { color: COLORS.textMuted, fontSize: 13, marginTop: 8, lineHeight: 18 },
   metaBlock: { marginTop: 16 },
   metaLabel: { color: COLORS.cream, opacity: 0.5, fontSize: 11, letterSpacing: 1 },
   metaValue: { color: COLORS.cream, fontSize: 14, marginTop: 2 },

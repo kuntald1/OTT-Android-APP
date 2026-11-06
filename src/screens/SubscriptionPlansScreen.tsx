@@ -3,10 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -24,23 +22,16 @@ import {
   fetchMyPayments,
   fetchMyVideoPurchases,
   fetchTaxConfig,
-  createRazorpayOrder,
-  verifyRazorpayPayment,
-  RazorpayOrder,
-  AutopaySetup,
   AutopayStatus,
-  createAutopaySubscription,
-  verifyAutopayPayment,
   fetchMyAutopay,
   cancelMyAutopay,
 } from "@/api/subscriptions";
 import { resolveMediaUrl, extractErrorMessage } from "@/api/apiClient";
 import { fetchMyParentAccount } from "@/api/subAccounts";
 import { useAuth } from "@/context/AuthContext";
-import { notifySubscriptionChanged } from "@/hooks/useSubscriptionAccess";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 import GradientBackground from "@/components/GradientBackground";
-import RazorpayCheckoutWebView from "@/components/RazorpayCheckoutWebView";
+import { WEB_PURCHASE_NOTICE } from "@/utils/purchaseNotice";
 
 const PAYMENT_STATUS_COLORS: Record<string, string> = {
   paid: "#4CAF7D",
@@ -55,11 +46,11 @@ function monthlyPriceFor(plan: SubscriptionPlan, screens: number): number {
   return parseFloat(plan.base_price) + parseFloat(plan.per_extra_screen) * (screens - 1);
 }
 
-// A family sub-account shares its parent's plan and never buys or changes one
-// (the backend refuses it too). Every route to this screen — the menu, the
-// "Subscribe to Archive" box on a locked video — therefore ends here with a
-// clear message instead of a checkout. The real screen is unchanged below, as
-// SubscriptionPurchaseScreen.
+// Nothing is bought here: the app lists the plans and their prices and says
+// that subscribing happens on theomy.com (see utils/purchaseNotice).
+//
+// A family sub-account shares its parent's plan and never has one of its own,
+// so it gets a different message again, naming the account that owns the plan.
 export default function SubscriptionPlansScreen() {
   const { user } = useAuth();
   if (user?.parent_id) return <ManagedPlanNotice />;
@@ -120,18 +111,9 @@ function SubscriptionPurchaseScreen() {
   const [loading, setLoading] = useState(true);
 
   const [screensByPlan, setScreensByPlan] = useState<Record<string, number>>({});
-  const [redeemReward, setRedeemReward] = useState(false);
-  const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan | null>(null);
-  const [modalRedeemReward, setModalRedeemReward] = useState(false);
-  const [creatingOrder, setCreatingOrder] = useState(false);
-  const [razorpayOrder, setRazorpayOrder] = useState<RazorpayOrder | null>(null);
 
-  // UPI Autopay (auto-renew): opt-in toggle inside the checkout modal, India
-  // only. `autopaySetup` is the Razorpay subscription waiting for the customer
-  // to approve it in the checkout WebView; `autopay` is the account's current
-  // auto-renew (shown as a card with a turn-off button).
-  const [modalAutoRenew, setModalAutoRenew] = useState(false);
-  const [autopaySetup, setAutopaySetup] = useState<AutopaySetup | null>(null);
+  // Auto-renew set up on the website. It can be turned off here — a
+  // cancellation, not a purchase — but never started here.
   const [autopay, setAutopay] = useState<AutopayStatus | null>(null);
   const [cancellingAutopay, setCancellingAutopay] = useState(false);
   const [showAllSubs, setShowAllSubs] = useState(false);
@@ -176,104 +158,9 @@ function SubscriptionPurchaseScreen() {
   const setScreens = (planId: string, delta: number) =>
     setScreensByPlan((prev) => ({ ...prev, [planId]: Math.max(1, Math.min(10, (prev[planId] || 1) + delta)) }));
 
-  const openCheckout = (plan: SubscriptionPlan) => {
-    setModalRedeemReward(redeemReward);
-    setModalAutoRenew(false);
-    setCheckoutPlan(plan);
-  };
-
-  const refreshAfterPayment = async () => {
-    try {
-      const [subsData, paymentsData] = await Promise.all([fetchMySubscriptions(), fetchMyPayments()]);
-      setSubscriptions(subsData);
-      setPayments(paymentsData);
-    } catch {
-      // Non-critical — the payment itself already succeeded either way.
-    }
-  };
-
-  const onPay = async (plan: SubscriptionPlan, screens: number, rewardApplied: boolean) => {
-    if (!selectedDuration) return;
-    setCreatingOrder(true);
-    try {
-      const order = await createRazorpayOrder({
-        plan_name: plan.name,
-        duration_label: selectedDuration.label,
-        screens,
-        reward_points_requested: rewardApplied ? rewardBalance : 0,
-      });
-      setRazorpayOrder(order);
-    } catch (err: any) {
-      Alert.alert(
-        "Couldn't start checkout",
-        extractErrorMessage(err, "Something went wrong preparing this payment. Please try again.")
-      );
-    } finally {
-      setCreatingOrder(false);
-    }
-  };
-
   const loadAutopay = async () => {
     if (!isIndia) return;
     setAutopay(await fetchMyAutopay().catch(() => null));
-  };
-
-  const onPayAutopay = async (plan: SubscriptionPlan, screens: number) => {
-    if (!selectedDuration) return;
-    setCreatingOrder(true);
-    try {
-      const setup = await createAutopaySubscription({
-        plan_name: plan.name,
-        duration_label: selectedDuration.label,
-        screens,
-      });
-      setAutopaySetup(setup);
-    } catch (err: any) {
-      Alert.alert(
-        "Couldn't set up auto-renew",
-        extractErrorMessage(err, "Something went wrong setting up auto-renew. Please try again, or pay without auto-renew.")
-      );
-    } finally {
-      setCreatingOrder(false);
-    }
-  };
-
-  const onAutopayCheckoutSuccess = async (result: {
-    razorpay_payment_id: string;
-    razorpay_subscription_id?: string;
-    razorpay_signature: string;
-  }) => {
-    if (!autopaySetup) return;
-    try {
-      const verified = await verifyAutopayPayment({
-        autopay_id: autopaySetup.autopay_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_subscription_id: result.razorpay_subscription_id || autopaySetup.razorpay_subscription_id,
-        razorpay_signature: result.razorpay_signature,
-      });
-      const planName = autopaySetup.plan_name;
-      setAutopaySetup(null);
-      setCheckoutPlan(null);
-      await Promise.all([refreshAfterPayment(), loadAutopay()]);
-      notifySubscriptionChanged();
-      Alert.alert(
-        verified.activated ? "Subscribed!" : "Auto-renew is set up",
-        verified.activated
-          ? `You're now on the ${planName} plan, and it will renew automatically.`
-          : "Your plan activates as soon as the first payment is confirmed — usually within a minute."
-      );
-    } catch {
-      setAutopaySetup(null);
-      Alert.alert(
-        "Payment received, but couldn't confirm it",
-        "Your payment may have gone through — please check Payment History in a moment, or contact support if it doesn't appear."
-      );
-    }
-  };
-
-  const onAutopayCheckoutFailure = (error: any) => {
-    setAutopaySetup(null);
-    Alert.alert("Payment failed", error?.description || "The payment didn't go through. Please try again.");
   };
 
   const confirmCancelAutopay = () => {
@@ -301,40 +188,6 @@ function SubscriptionPurchaseScreen() {
     );
   };
 
-  const onCheckoutSuccess = async (result: {
-    razorpay_payment_id: string;
-    razorpay_order_id: string;
-    razorpay_signature: string;
-  }) => {
-    if (!razorpayOrder) return;
-    try {
-      await verifyRazorpayPayment({
-        payment_id: razorpayOrder.payment_id,
-        razorpay_order_id: result.razorpay_order_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_signature: result.razorpay_signature,
-      });
-      setRazorpayOrder(null);
-      setCheckoutPlan(null);
-      await refreshAfterPayment();
-      // Tell tabs/header/lists/detail screens (all still mounted) to refetch.
-      notifySubscriptionChanged();
-      Alert.alert("Subscribed!", `You're now on the ${razorpayOrder.plan_name} plan.`);
-    } catch {
-      setRazorpayOrder(null);
-      Alert.alert(
-        "Payment received, but couldn't confirm it",
-        "Your payment may have gone through — please check Payment History in a moment, or contact support if it doesn't appear."
-      );
-    }
-  };
-
-  const onCheckoutDismiss = () => setRazorpayOrder(null);
-
-  const onCheckoutFailure = (error: any) => {
-    setRazorpayOrder(null);
-    Alert.alert("Payment failed", error?.description || "The payment didn't go through. Please try again.");
-  };
 
   if (loading) {
     return (
@@ -384,6 +237,10 @@ function SubscriptionPurchaseScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Plans</Text>
 
+          <View style={styles.webOnlyNotice}>
+            <Text style={styles.webOnlyNoticeText}>{WEB_PURCHASE_NOTICE}</Text>
+          </View>
+
           {durations.length > 0 && (
             <View style={styles.durationRow}>
               {durations.map((d) => (
@@ -415,15 +272,9 @@ function SubscriptionPurchaseScreen() {
                   You have {rewardBalance} reward points (₹{rewardBalance})
                 </Text>
                 <Text style={styles.rewardSubtitle}>
-                  {redeemReward ? "Applying to your total below — tap to remove" : "Tap to redeem toward this subscription"}
+                  They come off the price when you subscribe on theomy.com.
                 </Text>
               </View>
-              <Switch
-                value={redeemReward}
-                onValueChange={setRedeemReward}
-                trackColor={{ true: COLORS.gold, false: COLORS.surfaceStrong }}
-                thumbColor={COLORS.cream}
-              />
             </View>
           )}
 
@@ -431,8 +282,6 @@ function SubscriptionPurchaseScreen() {
             const screens = screensByPlan[plan.id] || 1;
             const monthly = monthlyPriceFor(plan, screens);
             const durationTotal = monthly * months * (1 - discount / 100);
-            const rewardApplied = redeemReward ? Math.min(rewardBalance, durationTotal) : 0;
-            const finalTotal = durationTotal - rewardApplied;
 
             return (
               <View key={plan.id} style={[styles.planCard, plan.highlighted && styles.planCardHighlighted]}>
@@ -441,15 +290,11 @@ function SubscriptionPurchaseScreen() {
                 <Text style={styles.planTagline}>{plan.tagline}</Text>
 
                 <View style={styles.priceRow}>
-                  {rewardApplied > 0 && <Text style={styles.priceStrike}>₹{durationTotal.toFixed(0)}</Text>}
-                  <Text style={styles.priceMain}>₹{finalTotal.toFixed(0)}</Text>
+                  <Text style={styles.priceMain}>₹{durationTotal.toFixed(0)}</Text>
                   <Text style={styles.priceSuffix}>/{selectedDuration?.label || "month"}</Text>
                 </View>
-                {rewardApplied > 0 && (
-                  <Text style={styles.rewardApplied}>− ₹{rewardApplied.toFixed(0)} reward points applied</Text>
-                )}
                 <Text style={styles.priceUsd}>
-                  ≈ ₹{monthly.toFixed(0)}/month before rewards
+                  ≈ ₹{monthly.toFixed(0)}/month{gstPercent > 0 ? `, plus ${gstPercent}% GST` : ""}
                   {discount > 0 ? ` · save ${discount}%` : ""}
                 </Text>
                 <Text style={styles.unlimited}>Unlimited</Text>
@@ -476,9 +321,6 @@ function SubscriptionPurchaseScreen() {
                   </Text>
                 ))}
 
-                <TouchableOpacity style={styles.subscribeButton} onPress={() => openCheckout(plan)}>
-                  <Text style={styles.subscribeButtonText}>Switch to this plan</Text>
-                </TouchableOpacity>
               </View>
             );
           })}
@@ -571,135 +413,6 @@ function SubscriptionPurchaseScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={!!checkoutPlan} transparent animationType="fade" onRequestClose={() => setCheckoutPlan(null)}>
-        {checkoutPlan &&
-          (() => {
-            const screens = screensByPlan[checkoutPlan.id] || 1;
-            const monthly = monthlyPriceFor(checkoutPlan, screens);
-            const durationTotal = monthly * months * (1 - discount / 100);
-            // Auto-renew has one fixed recurring amount, so reward points can't
-            // be redeemed on it (points are still earned on every charge).
-            const rewardApplied = modalRedeemReward && !modalAutoRenew ? Math.min(rewardBalance, durationTotal) : 0;
-            const planPrice = durationTotal - rewardApplied;
-            const gstAmount = planPrice * (gstPercent / 100);
-            const total = planPrice + gstAmount;
-
-            return (
-              <View style={styles.modalBackdrop}>
-                <View style={styles.modalCard}>
-                  <Text style={styles.modalTitle}>Confirm your subscription</Text>
-                  <Text style={styles.modalSubtitle}>
-                    {checkoutPlan.name} — {selectedDuration?.label}, {screens} screen{screens === 1 ? "" : "s"}
-                  </Text>
-
-                  {rewardBalance > 0 && !modalAutoRenew && (
-                    <View style={styles.modalRewardRow}>
-                      <Text style={styles.modalRewardText}>
-                        🎁 Redeem {rewardBalance} reward points (₹{rewardBalance} off)
-                      </Text>
-                      <Switch
-                        value={modalRedeemReward}
-                        onValueChange={setModalRedeemReward}
-                        trackColor={{ true: COLORS.gold, false: COLORS.surfaceStrong }}
-                        thumbColor={COLORS.cream}
-                      />
-                    </View>
-                  )}
-
-                  {isIndia && (
-                    <View style={styles.modalAutopayRow}>
-                      <Text style={styles.modalAutopayText}>
-                        Auto-renew with UPI Autopay — ₹{total.toFixed(0)} every {selectedDuration?.label.toLowerCase()}.
-                        Approve once in your UPI app; turn it off any time.
-                        {rewardBalance > 0 && modalAutoRenew ? " Reward points can't be redeemed on auto-renew." : ""}
-                      </Text>
-                      <Switch
-                        value={modalAutoRenew}
-                        onValueChange={setModalAutoRenew}
-                        trackColor={{ true: COLORS.gold, false: COLORS.surfaceStrong }}
-                        thumbColor={COLORS.cream}
-                      />
-                    </View>
-                  )}
-
-                  <View style={styles.modalPriceBlock}>
-                    <View style={styles.modalPriceRow}>
-                      <Text style={styles.modalPriceLabel}>Plan price</Text>
-                      <Text style={styles.modalPriceValue}>₹{planPrice.toFixed(0)}</Text>
-                    </View>
-                    <View style={styles.modalPriceRow}>
-                      <Text style={styles.modalPriceLabel}>GST ({gstPercent}%)</Text>
-                      <Text style={styles.modalPriceValue}>₹{gstAmount.toFixed(0)}</Text>
-                    </View>
-                    <View style={[styles.modalPriceRow, styles.modalTotalRow]}>
-                      <Text style={styles.modalTotalLabel}>Total</Text>
-                      <Text style={styles.modalTotalValue}>₹{total.toFixed(0)}</Text>
-                    </View>
-                  </View>
-
-                  <TouchableOpacity
-                    style={styles.payButton}
-                    onPress={() =>
-                      modalAutoRenew ? onPayAutopay(checkoutPlan, screens) : onPay(checkoutPlan, screens, modalRedeemReward)
-                    }
-                    disabled={creatingOrder}
-                  >
-                    {creatingOrder ? (
-                      <ActivityIndicator size="small" color={COLORS.ctaText} />
-                    ) : (
-                      <Text style={styles.payButtonText}>
-                        {modalAutoRenew
-                          ? `Pay ₹${total.toFixed(0)} & turn on auto-renew`
-                          : `Pay ₹${total.toFixed(0)} with Razorpay`}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.modalCancel}
-                    onPress={() => setCheckoutPlan(null)}
-                    disabled={creatingOrder}
-                  >
-                    <Text style={styles.modalCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })()}
-      </Modal>
-
-      {autopaySetup && (
-        <RazorpayCheckoutWebView
-          visible={!!autopaySetup}
-          keyId={autopaySetup.razorpay_key_id}
-          subscriptionId={autopaySetup.razorpay_subscription_id}
-          name="theomy"
-          description={`${autopaySetup.plan_name} — ${autopaySetup.duration_label} (auto-renew)`}
-          prefillName={user?.name}
-          prefillEmail={user?.email}
-          prefillContact={user?.phone}
-          onSuccess={onAutopayCheckoutSuccess}
-          onDismiss={() => setAutopaySetup(null)}
-          onFailure={onAutopayCheckoutFailure}
-        />
-      )}
-
-      {razorpayOrder && (
-        <RazorpayCheckoutWebView
-          visible={!!razorpayOrder}
-          keyId={razorpayOrder.razorpay_key_id}
-          orderId={razorpayOrder.razorpay_order_id}
-          amountPaise={Math.round(parseFloat(razorpayOrder.total_amount) * 100)}
-          currency={razorpayOrder.currency}
-          name="theomy"
-          description={`${razorpayOrder.plan_name} — ${razorpayOrder.duration_label}`}
-          prefillName={user?.name}
-          prefillEmail={user?.email}
-          prefillContact={user?.phone}
-          onSuccess={onCheckoutSuccess}
-          onDismiss={onCheckoutDismiss}
-          onFailure={onCheckoutFailure}
-        />
-      )}
     </GradientBackground>
   );
 }
@@ -737,6 +450,13 @@ const styles = StyleSheet.create({
   durationPillText: { ...TYPE.label, color: COLORS.cream },
   durationPillTextActive: { color: COLORS.ctaText, fontWeight: "800" },
   durationDiscount: { ...TYPE.caption, color: COLORS.ctaText, marginTop: 2 },
+  webOnlyNotice: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  webOnlyNoticeText: { ...TYPE.body, color: COLORS.textMuted },
   rewardRow: {
     flexDirection: "row",
     alignItems: "center",

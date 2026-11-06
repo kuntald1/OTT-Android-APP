@@ -127,9 +127,9 @@ export default function LiveEventsScreen() {
     setRefreshing(false);
   };
 
-  // Every card opens the event's own screen, which holds the player, the
-  // checkout and the full description — except "subscribe", which has a
-  // destination of its own, and "sign in", which has no screen at all.
+  // Every card opens the event's own screen, which holds the player and
+  // the full description — except "subscribe", which has a destination of
+  // its own, and "sign in", which has no screen at all.
   const handleAct = (event: LiveEventPublic) => {
     const action = liveEventAction(event);
     if (action.kind === "login") return navigation.navigate("Login");
@@ -172,7 +172,7 @@ export default function LiveEventsScreen() {
 
         {!isAuthenticated && events.length > 0 && (
           <Text style={styles.signedOutNote}>
-            Sign in to watch — you can buy a show or subscribe from here.
+            Sign in to watch the shows your plan covers, or the ones you've already bought.
           </Text>
         )}
       </ScrollView>

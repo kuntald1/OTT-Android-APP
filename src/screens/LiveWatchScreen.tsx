@@ -10,21 +10,12 @@ import {
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import RNVideo from "react-native-video";
-import {
-  createLiveEventOrder,
-  fetchPublicLiveEvent,
-  verifyLiveEventPayment,
-  LiveEventPublic,
-  LiveStreamOrder,
-} from "@/api/liveEvents";
-import { extractErrorMessage } from "@/api/apiClient";
+import { fetchPublicLiveEvent, LiveEventPublic } from "@/api/liveEvents";
 import { useAuth } from "@/context/AuthContext";
 import { formatPrice, liveEventAction } from "@/utils/liveAccess";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 import GradientBackground from "@/components/GradientBackground";
-import RazorpayCheckoutWebView, {
-  RazorpaySuccessResult,
-} from "@/components/RazorpayCheckoutWebView";
+import { WEB_TICKET_NOTICE } from "@/utils/purchaseNotice";
 
 // ---------------------------------------------------------------------------
 // One live event: the player when this viewer may watch and it's on air,
@@ -32,8 +23,9 @@ import RazorpayCheckoutWebView, {
 // plan, needs a ticket, or over.
 //
 // The reason comes from the server (has_access / access_reason); this
-// screen never guesses it from the subscription. Ticket checkout reuses
-// the same Razorpay WebView the subscription flow uses.
+// screen never guesses it from the subscription. Tickets are not sold
+// here — see utils/purchaseNotice for why — so a viewer without one is
+// told the price and where to buy it.
 // ---------------------------------------------------------------------------
 
 export default function LiveWatchScreen() {
@@ -48,9 +40,6 @@ export default function LiveWatchScreen() {
   const [playerError, setPlayerError] = useState(false);
   const [playerKey, setPlayerKey] = useState(0);
 
-  const [order, setOrder] = useState<LiveStreamOrder | null>(null);
-  const [buying, setBuying] = useState(false);
-  const [buyError, setBuyError] = useState("");
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -73,37 +62,6 @@ export default function LiveWatchScreen() {
   useEffect(() => {
     if (event?.title) navigation.setOptions({ title: event.title });
   }, [event?.title, navigation]);
-
-  const startCheckout = async () => {
-    setBuyError("");
-    setBuying(true);
-    try {
-      setOrder(await createLiveEventOrder(id));
-    } catch (e) {
-      setBuyError(extractErrorMessage(e, "Couldn't start checkout. Please try again."));
-    } finally {
-      setBuying(false);
-    }
-  };
-
-  const onCheckoutSuccess = async (result: RazorpaySuccessResult) => {
-    setOrder(null);
-    try {
-      await verifyLiveEventPayment({
-        purchase_id: order!.purchase_id,
-        razorpay_order_id: result.razorpay_order_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_signature: result.razorpay_signature,
-      });
-      // Re-fetch rather than flipping a local flag: only the server can
-      // hand back the playback_url this screen needs.
-      await load();
-    } catch (e) {
-      setBuyError(
-        extractErrorMessage(e, "Payment verification failed. If money was deducted, contact support.")
-      );
-    }
-  };
 
   if (loading) {
     return (
@@ -139,6 +97,7 @@ export default function LiveWatchScreen() {
   let headline = action.isLive ? "This show is on air now" : "Not live yet";
   let detail = action.hint;
   let cta: { label: string; onPress: (() => void) | null } | null = null;
+  let notice = "";
 
   if (action.kind === "ended") {
     icon = "radio-outline";
@@ -153,16 +112,9 @@ export default function LiveWatchScreen() {
       ? `${action.label} to watch it.`
       : `${action.hint} · ${action.label} to watch it.`;
   } else if (action.kind === "pay") {
-    const buyLine = price
-      ? action.isLive
-        ? `Buy this show for ${price} to watch it.`
-        : `Buy it now for ${price} and you're set for show time.`
-      : "Buy this show to watch it.";
-    detail = action.isLive ? buyLine : `${action.hint} · ${buyLine}`;
-    cta = {
-      label: buying ? "Opening checkout…" : action.label,
-      onPress: buying ? null : startCheckout,
-    };
+    const priceLine = price ? `This show needs a ticket — ${price}.` : "This show needs a ticket.";
+    detail = action.isLive ? priceLine : `${action.hint} · ${priceLine}`;
+    notice = WEB_TICKET_NOTICE;
   }
 
   return (
@@ -208,7 +160,7 @@ export default function LiveWatchScreen() {
                 <Text style={styles.btnText}>{cta.label}</Text>
               </TouchableOpacity>
             )}
-            {!!buyError && <Text style={styles.errorText}>{buyError}</Text>}
+            {!!notice && <Text style={styles.webNotice}>{notice}</Text>}
           </View>
         )}
 
@@ -224,26 +176,6 @@ export default function LiveWatchScreen() {
         </View>
       </ScrollView>
 
-      {order && isAuthenticated && (
-        <RazorpayCheckoutWebView
-          visible={!!order}
-          keyId={order.razorpay_key_id}
-          orderId={order.razorpay_order_id}
-          amountPaise={Math.round(parseFloat(order.amount) * 100)}
-          currency={order.currency}
-          name="theomy"
-          description={order.live_stream_title}
-          prefillName={user?.name}
-          prefillEmail={user?.email}
-          prefillContact={user?.phone}
-          onSuccess={onCheckoutSuccess}
-          onDismiss={() => setOrder(null)}
-          onFailure={() => {
-            setOrder(null);
-            setBuyError("Payment failed. Please try again.");
-          }}
-        />
-      )}
     </GradientBackground>
   );
 }
@@ -279,6 +211,7 @@ const styles = StyleSheet.create({
   lockedDetail: { ...TYPE.body, color: COLORS.textMuted, textAlign: "center" },
 
   msg: { ...TYPE.body, color: COLORS.cream, textAlign: "center", marginBottom: SPACING.md },
+  webNotice: { ...TYPE.caption, color: COLORS.textMuted, marginTop: 10, textAlign: "center" },
   errorText: { ...TYPE.caption, color: "#f87171", textAlign: "center" },
   btn: {
     backgroundColor: COLORS.gold,
