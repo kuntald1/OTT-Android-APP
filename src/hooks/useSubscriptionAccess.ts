@@ -35,7 +35,8 @@ export function onSubscriptionChanged(listener: () => void): () => void {
 // hook (AppHeader, MainTabs) makes its own GET /subscriptions/me call
 // rather than sharing one — negligible for how rarely this changes.
 //
-// plan_name is matched case-insensitively against "Play"/"Archive" —
+// plan_name is matched case-insensitively against the section plans
+// ("Contemporary"/"Heritage", or their pre-rename names Play/Archive) —
 // anything else (including "Both", an unrecognized name, or no active
 // subscription at all) defaults to BOTH true. That default matters:
 // a logged-out user, a lapsed subscription, or a plan name this app
@@ -65,10 +66,10 @@ export function useSubscriptionAccess() {
       const sub = await fetchMyActiveSubscription();
       const planName = (sub?.plan_name || "").trim().toLowerCase();
       setIsSubscribed(!!planName);
-      if (planName === "play") {
+      if (planName === "contemporary" || planName === "play") {
         setHasPlay(true);
         setHasArchive(false);
-      } else if (planName === "archive") {
+      } else if (planName === "heritage" || planName === "archive") {
         setHasPlay(false);
         setHasArchive(true);
       } else {

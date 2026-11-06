@@ -270,11 +270,11 @@ export default function VideoDetailScreen() {
                 ? `₹${video.pricing.price_inr} needed to watch this video`
                 : user?.parent_id
                 // A sub-account can't buy a plan; the main account holder does.
-                ? `Ask the main account holder to add ${video.section === "archive" ? "Archive" : video.section === "play" ? "Play" : "a plan"} to watch this video`
+                ? `Ask the main account holder to add ${video.section === "archive" ? "Heritage" : video.section === "play" ? "Contemporary" : "a plan"} to watch this video`
                 : video.section === "archive"
-                ? "Subscribe to Archive to watch this video"
+                ? "Subscribe to Heritage to watch this video"
                 : video.section === "play"
-                ? "Subscribe to Play to watch this video"
+                ? "Subscribe to Contemporary to watch this video"
                 : "A subscription is needed to watch this video"}
             </Text>
           </TouchableOpacity>

@@ -5,7 +5,13 @@ export const FACEBOOK_APP_ID = "2271307686962571";
 // mobile-only backend callback redirects here when auth completes.
 export const AUTH_CALLBACK_SCHEME = "theomy://auth-callback";
 
-const API_HOST = "https://movixa.duckdns.org";
+// Must match the backend's BACKEND_BASE_URL exactly: the backend rebuilds
+// this same redirect_uri when it exchanges the authorization code, and
+// Google/Facebook reject the exchange if the two differ. The server .env
+// now has BACKEND_BASE_URL=https://theomy.com/api, so the app must send
+// theomy.com here too — sending the old movixa.duckdns.org host is what
+// produced "Failed to exchange Google authorization code".
+const API_HOST = "https://theomy.com";
 
 // Requires a NEW backend route — see BACKEND_REQUIREMENTS.md. This is NOT
 // the same as the existing /api/auth/facebook/callback (that one redirects

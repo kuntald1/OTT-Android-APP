@@ -18,6 +18,7 @@ import { Video } from "@/types";
 import { COLORS } from "@/theme/colors";
 import AppHeader from "@/components/AppHeader";
 import GradientBackground from "@/components/GradientBackground";
+import { sectionLabel } from "@/utils/sectionLabels";
 
 // My List items only carry a summary (id, title, image, meta, section) — to
 // open the full detail screen we need the full object, so this looks each
@@ -134,7 +135,7 @@ export default function MyListScreen() {
                   resizeMode="cover"
                 />
                 <View style={styles.sectionBadge}>
-                  <Text style={styles.sectionBadgeText}>{item.section.toUpperCase()}</Text>
+                  <Text style={styles.sectionBadgeText}>{sectionLabel(item.section).toUpperCase()}</Text>
                 </View>
                 <TouchableOpacity style={styles.removeButton} onPress={() => handleRemove(item)}>
                   <Text style={styles.removeButtonText}>✕</Text>

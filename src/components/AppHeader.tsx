@@ -25,7 +25,7 @@ export default function AppHeader({
   const { user } = useAuth();
   const { hasPlay, hasArchive, isSubscribed } = useSubscriptionAccess();
   // Which pill the person tapped without having access (null = no alert).
-  const [lockedPill, setLockedPill] = useState<"Play" | "Archive" | null>(null);
+  const [lockedPill, setLockedPill] = useState<"Contemporary" | "Heritage" | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
@@ -97,12 +97,12 @@ export default function AppHeader({
             // access to (no plan at all, or a plan without that section)
             // opens the "subscribe?" alert instead of navigating.
             <View style={styles.switcherRow}>
-              {renderPill("Play", activeRoute === "Plays", () => {
-                if (isSubscribed === false || !hasPlay) setLockedPill("Play");
+              {renderPill("Contemporary", activeRoute === "Plays", () => {
+                if (isSubscribed === false || !hasPlay) setLockedPill("Contemporary");
                 else navigation.navigate("MainTabs", { screen: "Home" });
               })}
-              {renderPill("Archive", activeRoute === "Archive", () => {
-                if (isSubscribed === false || !hasArchive) setLockedPill("Archive");
+              {renderPill("Heritage", activeRoute === "Archive", () => {
+                if (isSubscribed === false || !hasArchive) setLockedPill("Heritage");
                 else navigation.navigate("MainTabs", { screen: "ArchiveTab" });
               })}
             </View>

@@ -13,8 +13,8 @@ import type { LiveEventPublic } from "@/api/liveEvents";
 // ---------------------------------------------------------------------------
 
 export const SECTION_LABELS: Record<string, string> = {
-  play: "Plays",
-  archive: "Archive",
+  play: "Contemporary",
+  archive: "Heritage",
   both: "theomy",
 };
 

@@ -335,7 +335,7 @@ export default function MyLiveEventsScreen() {
                     <Text style={styles.settingsChip}>
                       {ev.monetization_type === "pay_per_stream"
                         ? `Ticketed${ev.price_inr ? ` · ₹${Number(ev.price_inr)}` : ""}`
-                        : `Subscription · ${ev.section === "both" ? "Plays + Archive" : ev.section === "archive" ? "Archive" : "Plays"}`}
+                        : `Subscription · ${ev.section === "both" ? "Contemporary + Heritage" : ev.section === "archive" ? "Heritage" : "Contemporary"}`}
                     </Text>
                     {!!formatLocalDateTime(ev.scheduled_start_at) && (
                       <Text style={styles.settingsChip}>Show {formatLocalDateTime(ev.scheduled_start_at)}</Text>

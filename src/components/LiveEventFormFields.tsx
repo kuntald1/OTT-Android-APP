@@ -21,8 +21,8 @@ const ACCESS_OPTIONS: { value: "subscription" | "pay_per_stream"; label: string 
 
 const SECTIONS: { value: Section; label: string }[] = [
   { value: "both", label: "Both" },
-  { value: "play", label: "Plays" },
-  { value: "archive", label: "Archive" },
+  { value: "play", label: "Contemporary" },
+  { value: "archive", label: "Heritage" },
 ];
 
 export default function LiveEventFormFields({
