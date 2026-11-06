@@ -138,3 +138,29 @@ export async function fetchOrganisers(): Promise<Organiser[]> {
   const { data } = await apiClient.get<Organiser[]>("/organisers");
   return data;
 }
+
+
+// Where to send a donation to one organiser: their own QR code and bank
+// details. theomy does not take the payment — see the web app's
+// DonationPage for the same flow.
+//
+// Login-only on the server: the directory is public, an account number
+// is not.
+export interface OrganiserDonationDetails {
+  organiser_user_id: string;
+  organiser_name: string;
+  group_name: string;
+  account_number: string | null;
+  ifsc_code: string | null;
+  qr_code_url: string | null;
+}
+
+export async function fetchOrganiserDonationDetails(
+  organiserUserId: string
+): Promise<OrganiserDonationDetails> {
+  const { data } = await apiClient.get<OrganiserDonationDetails>(
+    `/organisers/${organiserUserId}/donation-details`
+  );
+  return data;
+}
+
