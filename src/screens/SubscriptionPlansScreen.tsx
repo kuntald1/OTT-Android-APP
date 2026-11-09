@@ -201,7 +201,7 @@ function SubscriptionPurchaseScreen() {
     <GradientBackground style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {(() => {
-          const current = subscriptions.find((x) => x.is_active);
+          const current = subscriptions.find((x) => x.is_active && new Date(x.expires_at) > new Date());
           return current ? (
             <View style={styles.currentPlanStrip}>
               <Text style={styles.currentPlanText}>
@@ -337,11 +337,11 @@ function SubscriptionPurchaseScreen() {
                     {sub.duration_label} · {sub.screens} screen{sub.screens === 1 ? "" : "s"} · ₹{sub.price}
                   </Text>
                   <Text style={styles.subExpiry}>
-                    {sub.is_active ? "Renews" : "Expired"} {new Date(sub.expires_at).toLocaleDateString()}
+                    {sub.is_active && new Date(sub.expires_at) > new Date() ? "Renews" : "Expired"} {new Date(sub.expires_at).toLocaleDateString()}
                   </Text>
                 </View>
-                <View style={[styles.statusPill, sub.is_active ? styles.statusPillActive : styles.statusPillInactive]}>
-                  <Text style={styles.statusPillText}>{sub.is_active ? "Active" : "Inactive"}</Text>
+                <View style={[styles.statusPill, sub.is_active && new Date(sub.expires_at) > new Date() ? styles.statusPillActive : styles.statusPillInactive]}>
+                  <Text style={styles.statusPillText}>{sub.is_active && new Date(sub.expires_at) > new Date() ? "Active" : "Expired"}</Text>
                 </View>
               </View>
             ))}
