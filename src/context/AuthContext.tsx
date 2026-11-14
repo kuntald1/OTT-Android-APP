@@ -38,7 +38,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   needsProfileCompletion: boolean;
-  completeDemographics: (payload: { dateOfBirth: string; city?: string }) => Promise<void>;
+  completeDemographics: (payload: { dateOfBirth: string; city?: string; gender?: string }) => Promise<void>;
   hasFamily: boolean;
   familyPickerOpen: boolean;
   openFamilyPicker: () => void;
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const completeDemographics = useCallback(async (payload: { dateOfBirth: string; city?: string }) => {
+  const completeDemographics = useCallback(async (payload: { dateOfBirth: string; city?: string; gender?: string }) => {
     await completeDemographicsRequest(payload);
     setNeedsProfileCompletion(false);
   }, []);

@@ -23,11 +23,21 @@ import CityPicker from "./CityPicker";
 // needs_profile is true, which is never true for a declared minor.
 // ---------------------------------------------------------------------------
 
+// Same options as the web app's Gender select; "" means "Prefer not to say"
+// and is sent to the server as no value.
+const GENDER_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Prefer not to say" },
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "other", label: "Other" },
+];
+
 export default function CompleteProfileModal() {
   const { user, needsProfileCompletion, completeDemographics } = useAuth();
   const insets = useSafeAreaInsets();
   const [dob, setDob] = useState("");
   const [city, setCity] = useState("");
+  const [gender, setGender] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -48,7 +58,7 @@ export default function CompleteProfileModal() {
     setError(null);
     setSubmitting(true);
     try {
-      await completeDemographics({ dateOfBirth: dob, city: isIndia ? city.trim() : undefined });
+      await completeDemographics({ dateOfBirth: dob, city: isIndia ? city.trim() : undefined, gender: gender || undefined });
     } catch (e: any) {
       setError(extractErrorMessage(e));
     } finally {
@@ -73,6 +83,27 @@ export default function CompleteProfileModal() {
               <CityPicker value={city} onChange={setCity} disabled={submitting} />
             </View>
           )}
+
+          <View style={styles.genderWrap}>
+            <Text style={styles.fieldLabel}>Gender (optional)</Text>
+            <View style={styles.genderRow}>
+              {GENDER_OPTIONS.map((opt) => {
+                const active = gender === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value || "none"}
+                    style={[styles.genderChip, active && styles.genderChipActive]}
+                    onPress={() => setGender(opt.value)}
+                    disabled={submitting}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={[styles.genderChipText, active && styles.genderChipTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
 
           {error && <Text style={styles.error}>{error}</Text>}
 
@@ -104,6 +135,19 @@ const styles = StyleSheet.create({
   subtitle: { ...TYPE.caption, color: COLORS.textMuted, marginBottom: SPACING.lg },
   fieldLabel: { ...TYPE.caption, color: COLORS.textMuted, marginBottom: SPACING.xs },
   cityWrap: { marginTop: SPACING.xs },
+  genderWrap: { marginBottom: SPACING.md },
+  genderRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
+  genderChip: {
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    backgroundColor: COLORS.burgundyDark,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  genderChipActive: { borderColor: COLORS.gold },
+  genderChipText: { ...TYPE.caption, color: COLORS.cream },
+  genderChipTextActive: { color: COLORS.gold, fontWeight: "700" },
   error: { ...TYPE.caption, color: COLORS.burgundyLight, marginBottom: SPACING.md },
   button: {
     backgroundColor: COLORS.gold,

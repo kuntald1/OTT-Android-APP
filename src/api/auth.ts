@@ -165,10 +165,13 @@ export async function fetchDemographicsStatus(): Promise<DemographicsStatus> {
 export async function completeDemographics(payload: {
   dateOfBirth: string;
   city?: string;
+  gender?: string;
 }): Promise<DemographicsStatus> {
   const { data } = await apiClient.put<DemographicsStatus>("/auth/me/demographics", {
     date_of_birth: payload.dateOfBirth,
     city: payload.city || null,
+    // Omitted (not null) when empty, same as the web app's request.
+    ...(payload.gender ? { gender: payload.gender } : {}),
   });
   return data;
 }
