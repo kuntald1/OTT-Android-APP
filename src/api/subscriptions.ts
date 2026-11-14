@@ -102,6 +102,23 @@ export async function fetchTaxConfig(): Promise<{ gst_percent: string }> {
   return data;
 }
 
+// Reward points: the earn rate per kind of purchase, and what ONE point
+// is worth in rupees (point_value_rupees — 1 means 1 point = ₹1, 0.1
+// means 10 points = ₹1). Set by an admin in Admin > Reward Points, so
+// the app reads it instead of assuming a point is a rupee. Public, no
+// auth needed.
+export async function fetchRewardConfig(): Promise<{
+  subscription_reward_percent: string;
+  autopay_reward_percent: string;
+  video_reward_percent: string;
+  live_stream_reward_percent: string;
+  ticket_reward_percent: string;
+  point_value_rupees: string;
+}> {
+  const { data } = await apiClient.get("/reward-config");
+  return data;
+}
+
 // Confirmed: GET /subscriptions/me -> the single currently-active
 // Subscription (different from GET /subscriptions, which returns the full
 // history array).

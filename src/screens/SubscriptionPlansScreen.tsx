@@ -22,6 +22,7 @@ import {
   fetchMyPayments,
   fetchMyVideoPurchases,
   fetchTaxConfig,
+  fetchRewardConfig,
   AutopayStatus,
   fetchMyAutopay,
   cancelMyAutopay,
@@ -120,6 +121,11 @@ function SubscriptionPurchaseScreen() {
   const isIndia = user?.country === "India";
 
   const rewardBalance = user?.reward_points_balance || 0;
+  // What one point is worth in ₹ (Admin > Reward Points). 1 until the
+  // config loads — that was the hardcoded value before this was a
+  // setting, so the number shown is never wrong by more than a refresh.
+  const [pointValue, setPointValue] = useState(1);
+  const rewardValue = Math.round(rewardBalance * pointValue);
 
   useEffect(() => {
     (async () => {
@@ -132,6 +138,12 @@ function SubscriptionPurchaseScreen() {
           fetchMyVideoPurchases(),
           fetchTaxConfig(),
         ]);
+        fetchRewardConfig()
+          .then((c) => {
+            const value = parseFloat(c.point_value_rupees);
+            if (Number.isFinite(value) && value > 0) setPointValue(value);
+          })
+          .catch(() => {});
         setDurations(durationsData);
         setSelectedDurationId(durationsData.find((d) => d.months === 1)?.id || durationsData[0]?.id || null);
         setPlans(plansData);
@@ -269,7 +281,7 @@ function SubscriptionPurchaseScreen() {
             <View style={styles.rewardRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rewardTitle}>
-                  You have {rewardBalance} reward points (₹{rewardBalance})
+                  You have {rewardBalance} reward points (₹{rewardValue})
                 </Text>
                 <Text style={styles.rewardSubtitle}>
                   They come off the price when you subscribe on theomy.com.
