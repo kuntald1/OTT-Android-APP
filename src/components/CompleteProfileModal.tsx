@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { extractErrorMessage } from "@/api/apiClient";
@@ -67,8 +67,26 @@ export default function CompleteProfileModal() {
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => {}}>
-      <View style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={() => {}}
+    >
+      {/* Edge-to-edge Android doesn't resize the window for the keyboard,
+          so lift the content by the keyboard height and let it scroll —
+          otherwise City / Gender / Continue end up under the keyboard. */}
+      <KeyboardAvoidingView style={styles.root} behavior="padding">
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[
+            styles.backdrop,
+            { paddingTop: insets.top + SPACING.lg, paddingBottom: insets.bottom + SPACING.lg },
+          ]}
+          keyboardShouldPersistTaps="handled"
+        >
         <View style={styles.card}>
           <Text style={styles.title}>Complete your profile</Text>
           <Text style={styles.subtitle}>
@@ -111,15 +129,17 @@ export default function CompleteProfileModal() {
             <Text style={styles.buttonText}>{submitting ? "Saving…" : "Continue"}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "rgba(10,1,4,0.92)" },
+  flex: { flex: 1 },
   backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(10,1,4,0.92)",
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: SPACING.lg,

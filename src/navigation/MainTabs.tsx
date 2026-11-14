@@ -1,5 +1,6 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import PlaysBrowseScreen from "@/screens/PlaysBrowseScreen";
 import CommunityScreen from "@/screens/CommunityScreen";
@@ -17,6 +18,11 @@ const Tab = createBottomTabNavigator();
 // 6th bottom-tab item, so this navigator only has real destinations.
 export default function MainTabs() {
   const { hasPlay, hasArchive } = useSubscriptionAccess();
+  // A fixed `height` in tabBarStyle replaces the navigator's own
+  // bottom-inset handling, so on Android (3-button or gesture bar) and
+  // iPhones with a home indicator the bar slid under the system
+  // controls. Add the inset back to both height and bottom padding.
+  const insets = useSafeAreaInsets();
   // An Archive-only plan (no Play access) should land the person on
   // Archive when they tap Home — there is nothing for them on the
   // Play screen otherwise. Every other case (Both, Play-only, no
@@ -31,8 +37,8 @@ export default function MainTabs() {
           backgroundColor: COLORS.burgundyMuted,
           borderTopColor: "rgba(255,255,255,0.1)",
           ...ELEVATION.bar,
-          height: 70,
-          paddingBottom: 10,
+          height: 70 + insets.bottom,
+          paddingBottom: 10 + insets.bottom,
           paddingTop: 8,
         },
         tabBarActiveTintColor: COLORS.gold,
@@ -109,8 +115,8 @@ export default function MainTabs() {
             backgroundColor: COLORS.archiveMid,
             borderTopColor: "rgba(255,255,255,0.1)",
             ...ELEVATION.bar,
-            height: 70,
-            paddingBottom: 10,
+            height: 70 + insets.bottom,
+            paddingBottom: 10 + insets.bottom,
             paddingTop: 8,
           },
           tabBarActiveTintColor: COLORS.archiveGold,

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { FlatList, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { FlatList, KeyboardAvoidingView, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 import { INDIA_CITIES_FLAT } from "@/data/indiaCities";
 
@@ -25,6 +26,7 @@ export default function CityPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const insets = useSafeAreaInsets();
   const isOther = value !== "" && value !== OTHER && !INDIA_CITIES_FLAT.some((c) => c.city === value);
   const showOtherInput = value === OTHER || isOther;
 
@@ -65,9 +67,19 @@ export default function CityPicker({
         />
       )}
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
+      <Modal
+        visible={open}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => setOpen(false)}
+      >
+        {/* Android draws edge-to-edge, so the window no longer resizes for
+            the keyboard on its own — pad the bottom by the keyboard height
+            so the search box and list stay visible above it. */}
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior="padding">
+          <View style={[styles.modalSheet, { paddingBottom: SPACING.lg + insets.bottom }]}>
             <TextInput
               style={styles.searchInput}
               value={query}
@@ -96,7 +108,7 @@ export default function CityPicker({
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -130,7 +142,7 @@ const styles = StyleSheet.create({
     color: COLORS.cream,
     marginBottom: SPACING.sm,
   },
-  list: { maxHeight: 320 },
+  list: { maxHeight: 320, flexShrink: 1 },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
