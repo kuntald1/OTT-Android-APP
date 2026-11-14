@@ -192,7 +192,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       partialUser: Partial<User> & Pick<User, "id" | "name" | "email">
     ) => {
       await setStoredToken(token);
-      setUser({ role: "user", ...partialUser } as User);
+      // The callback URL only carries id/name/email, so the user object
+      // built from it has no `country`. That hid the City field in
+      // "Complete your profile" while the server still required it for
+      // India accounts ("City is required."). Load the full user from
+      // /auth/me (same as session restore); fall back to the partial
+      // user if that call fails.
+      try {
+        const fullUser = await fetchCurrentUser();
+        setUser(fullUser);
+      } catch {
+        setUser({ role: "user", ...partialUser } as User);
+      }
       refreshProfileCompletionStatus();
       openFamilyPickerIfFamily();
     },
