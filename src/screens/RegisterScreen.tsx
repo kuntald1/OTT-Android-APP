@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { sendRegistrationEmailOtp } from "@/api/auth";
 import { extractErrorMessage } from "@/api/apiClient";
@@ -31,6 +31,7 @@ import CityPicker from "@/components/CityPicker";
 // at all — this screen just surfaces whatever error comes back.
 export default function RegisterScreen() {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { register } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -109,9 +110,12 @@ export default function RegisterScreen() {
     <GradientBackground style={styles.root}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 32 + insets.bottom }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <Text style={styles.heading}>Create your account</Text>
           <Text style={styles.subheading}>Login is required to browse theomy.</Text>
 
