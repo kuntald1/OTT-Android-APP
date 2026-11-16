@@ -19,6 +19,7 @@ import SocialLoginRow from "@/components/SocialLoginRow";
 import GradientBackground from "@/components/GradientBackground";
 import DobInput from "@/components/DobInput";
 import CityPicker from "@/components/CityPicker";
+import { claimReferral } from "@/api/referrals";
 
 // Matches the web app's registration form field-for-field (Admin decisions,
 // Sept 2026): Date of birth is required for every registration (under-18
@@ -32,6 +33,10 @@ import CityPicker from "@/components/CityPicker";
 export default function RegisterScreen() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  // Optional invite code, typed in by someone who was sent one. The
+  // account has to exist before it can be claimed, so this is applied
+  // after register() returns, not sent along with it.
+  const [referralCode, setReferralCode] = useState("");
   const { register } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -88,6 +93,17 @@ export default function RegisterScreen() {
         dateOfBirth: dob,
         city: isIndia ? city.trim() : undefined,
       });
+      if (referralCode.trim()) {
+        // The account is already made and the person is signed in by
+        // now, so a bad or expired code must not look like a failed
+        // registration. The server answers { claimed: false } rather
+        // than erroring; either way it is swallowed here.
+        try {
+          await claimReferral(referralCode.trim().toUpperCase());
+        } catch {
+          // Nothing to tell them — the account is theirs regardless.
+        }
+      }
     } catch (e: any) {
       setError(extractErrorMessage(e, "Couldn't create the account"));
     } finally {
@@ -176,6 +192,18 @@ export default function RegisterScreen() {
               <CityPicker value={city} onChange={setCity} disabled={codeSent} />
             </View>
           )}
+
+          <TextInput
+            style={styles.input}
+            placeholder="Invite code (optional)"
+            placeholderTextColor="#c9b8b8"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={16}
+            value={referralCode}
+            onChangeText={setReferralCode}
+            editable={!codeSent}
+          />
 
           {codeSent && (
             <>

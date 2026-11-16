@@ -26,6 +26,7 @@ import ManageProfileScreen from "@/screens/ManageProfileScreen";
 import WatchHistoryScreen from "@/screens/WatchHistoryScreen";
 import RequestOrganiserScreen from "@/screens/RequestOrganiserScreen";
 import HelpCenterScreen from "@/screens/HelpCenterScreen";
+import ReferEarnScreen from "@/screens/ReferEarnScreen";
 import SubscriptionPlansScreen from "@/screens/SubscriptionPlansScreen";
 import RevenueScreen from "@/screens/RevenueScreen";
 import MyVideoListScreen from "@/screens/MyVideoListScreen";
@@ -126,6 +127,11 @@ function AppStack() {
         name="HelpCenter"
         component={HelpCenterScreen}
         options={{ title: "Help Center" }}
+      />
+      <Stack.Screen
+        name="ReferEarn"
+        component={ReferEarnScreen}
+        options={{ title: "Refer & Earn" }}
       />
       <Stack.Screen
         name="SubscriptionPlans"
