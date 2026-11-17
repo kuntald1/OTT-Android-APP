@@ -193,27 +193,6 @@ export default function ReferEarnScreen() {
             {sentTo && <Text style={styles.success}>Invite sent to {sentTo}.</Text>}
           </View>
 
-          {/* --------------------------------------------- how it works */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>How it works</Text>
-            {[
-              "Send your link or code to a friend.",
-              "They create a theomy account with it.",
-              `They take their first subscription — then ${data.referrer_reward_points} points land in your account and ${data.referred_reward_points} in theirs.`,
-            ].map((step, i) => (
-              <View key={step} style={styles.stepRow}>
-                <View style={styles.stepNum}>
-                  <Text style={styles.stepNumText}>{i + 1}</Text>
-                </View>
-                <Text style={styles.stepText}>{step}</Text>
-              </View>
-            ))}
-            <Text style={styles.cardHint}>
-              Nothing is credited for sharing or for signing up on its own — the subscription is what
-              pays. An invite works once per person, and not for anyone who has subscribed before.
-            </Text>
-          </View>
-
           {/* ----------------------------------------------- your stats */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Your referrals</Text>
