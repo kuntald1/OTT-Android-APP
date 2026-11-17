@@ -12,7 +12,11 @@ import PinField, { isCompletePin } from "./PinField";
 // shared/FamilyPinSection.jsx.
 // ---------------------------------------------------------------------------
 
-export default function FamilyPinSection() {
+export default function FamilyPinSection({
+  // Called when the PIN form opens, so the screen can scroll it clear of
+  // the keyboard — this card sits at the very bottom of Manage Profile.
+  onStartEditing,
+}: { onStartEditing?: () => void } = {}) {
   const [pinSet, setPinSet] = useState<boolean | null>(null); // null while loading
   const [editing, setEditing] = useState(false);
   const [current, setCurrent] = useState("");
@@ -66,11 +70,11 @@ export default function FamilyPinSection() {
             )}
           </View>
           <Text style={styles.subtitle}>
-            Needed to get back into your account from a family account. Forgot it? Contact support to reset it.
+            Needed to get back into your account from a family account, and to mark a family account as 18 or over. Forgot it? Contact support to reset it.
           </Text>
         </View>
         {!editing && pinSet !== null && (
-          <TouchableOpacity onPress={() => { setEditing(true); setSaved(false); }} style={styles.editButton}>
+          <TouchableOpacity onPress={() => { setEditing(true); setSaved(false); onStartEditing?.(); }} style={styles.editButton}>
             <Text style={styles.editButtonText}>{pinSet ? "Change PIN" : "Set PIN"}</Text>
           </TouchableOpacity>
         )}

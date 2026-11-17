@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/context/AuthContext";
 import { updateProfile, uploadProfilePhoto, changePassword } from "@/api/auth";
@@ -22,6 +24,12 @@ import FamilyPinSection from "@/components/FamilyPinSection";
 
 export default function ManageProfileScreen() {
   const { user, updateUser } = useAuth();
+  const insets = useSafeAreaInsets();
+  // Family PIN is the LAST thing on this screen, so when its form opens
+  // the keyboard sits right on top of it. scrollToEnd after the keyboard
+  // has had a moment to appear brings it back into view; the
+  // KeyboardAvoidingView below is what makes that room exist at all.
+  const scrollRef = useRef<ScrollView>(null);
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState(user?.phone || "");
@@ -102,7 +110,19 @@ export default function ManageProfileScreen() {
 
   return (
     <GradientBackground style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      {/* behavior="padding" on BOTH platforms, not just iOS: this app runs
+          edge-to-edge, where Android's own adjustResize never fires, so
+          without this the keyboard simply covers whatever is at the
+          bottom of the page. Same fix as RegisterScreen. The navigation
+          header is accounted for automatically — KeyboardAvoidingView
+          measures its own frame, which starts below the header. */}
+      <KeyboardAvoidingView style={styles.screen} behavior="padding">
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={[styles.content, { paddingBottom: SPACING.xxl + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.card}>
           <View style={styles.avatarRow}>
             {photoUrl ? (
@@ -199,8 +219,15 @@ export default function ManageProfileScreen() {
         {user?.role === "plays_organiser" && <OrganiserAboutSections organiserName={user.name} />}
 
         <FamilyAccountsCard />
-        <FamilyPinSection />
+        <FamilyPinSection
+          onStartEditing={() => {
+            // The delay lets the keyboard finish animating in, otherwise
+            // we scroll to an end that is about to move.
+            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+          }}
+        />
       </ScrollView>
+      </KeyboardAvoidingView>
     </GradientBackground>
   );
 }

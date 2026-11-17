@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import RNVideo from "react-native-video";
-import { resolveMediaUrl } from "@/api/apiClient";
+import { MEDIA_HEADERS, resolveMediaUrl } from "@/api/apiClient";
 import { Video } from "@/types";
 import { COLORS, ELEVATION, RADIUS, SPACING, TYPE } from "@/theme";
 
@@ -78,8 +78,7 @@ export default function FeaturedCarousel({
                     // VideoPlayerScreen. Without them the video silently
                     // fails to decode, rendering as a plain black box.
                     headers: {
-                      Referer: "https://movixa.duckdns.org/",
-                      Origin: "https://movixa.duckdns.org",
+                      ...MEDIA_HEADERS,
                     },
                   }}
                   style={StyleSheet.absoluteFill}

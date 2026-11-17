@@ -5,6 +5,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { resolveMediaUrl } from "@/api/apiClient";
 import { Video } from "@/types";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
+import { ageRatingLabel } from "@/shared/ageRatings";
 
 export const MEDIA_CARD_WIDTH = 190;
 const MEDIA_CARD_HEIGHT = MEDIA_CARD_WIDTH * 1.5;
@@ -99,7 +100,7 @@ export default function MediaCard({
       <Text style={[styles.meta, { color: accentColor }]} numberOfLines={1}>
         {video.monetization_type === "subscription_only"
           ? "Subscription"
-          : [video.release_year, video.age_rating].filter(Boolean).join(" · ")}
+          : [video.release_year, ageRatingLabel(video.age_rating)].filter(Boolean).join(" · ")}
       </Text>
     </TouchableOpacity>
   );

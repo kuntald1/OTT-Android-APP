@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useRoute } from "@react-navigation/native";
 import RNVideo, { OnLoadData, VideoRef } from "react-native-video";
-import { getStoredToken } from "@/api/apiClient";
+import { API_HOST, getStoredToken, MEDIA_HEADERS } from "@/api/apiClient";
 import { saveProgress, sendWatchHeartbeat, endPlaybackSession } from "@/api/videos";
 import { Video } from "@/types";
 import { COLORS } from "@/theme/colors";
@@ -56,7 +56,7 @@ export default function VideoPlayerScreen() {
   // (see the loading branch below) until the token is loaded from storage.
   const vmapUrl =
     hasAds && authToken
-      ? `https://movixa.duckdns.org/api/videos/${video.id}/vmap?token=${encodeURIComponent(authToken)}`
+      ? `${API_HOST}/api/videos/${video.id}/vmap?token=${encodeURIComponent(authToken)}`
       : undefined;
 
   useEffect(() => {
@@ -204,10 +204,7 @@ export default function VideoPlayerScreen() {
           // backend), which needed no header at all. Sending the site's
           // real origin here only works once that origin is whitelisted in
           // Bunny Stream's Security settings (see reply for where).
-          headers: {
-            Referer: "https://movixa.duckdns.org/",
-            Origin: "https://movixa.duckdns.org",
-          },
+          headers: MEDIA_HEADERS,
         }}
         adTagUrl={vmapUrl}
         style={styles.video}

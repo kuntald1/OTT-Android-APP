@@ -1,10 +1,32 @@
 import axios, { AxiosError, AxiosInstance } from "axios";
 import * as SecureStore from "expo-secure-store";
 
-// Pre-launch domain — same backend/DB/API as theomy.com, only routing
-// differs (see theomy area notes: theomy.com returns 444 until launch).
-const API_HOST = "https://movixa.duckdns.org";
+// The live site. The app used to point at the pre-launch domain
+// (movixa.duckdns.org) back when theomy.com returned 444; theomy.com has
+// been serving since, and src/config/oauth.ts was already moved over —
+// Google sign-in broke while the two disagreed, because the backend
+// rebuilds the redirect_uri from its own BACKEND_BASE_URL
+// (https://theomy.com/api) and rejects a mismatch. Same backend, same
+// database either way: only the hostname differs.
+//
+// Exported so nothing else has to write a hostname of its own.
+export const API_HOST = "https://theomy.com";
 const API_BASE_URL = `${API_HOST}/api`;
+
+// Bunny Stream (vz-*.b-cdn.net) refuses a video request that carries no
+// Referer/Origin, and then the player renders a silent black box rather
+// than raising an error — so these ride along with every playback URL.
+//
+// This is hotlink protection, NOT an API endpoint: the value has to be a
+// hostname listed under Allowed Referrers in Bunny Stream's Security
+// settings, which is a separate list from anything in this codebase.
+// theomy.com is there already (the website plays video from it). If video
+// ever goes black in the app while the rest of it works, this constant is
+// the first thing to check.
+export const MEDIA_HEADERS = {
+  Referer: `${API_HOST}/`,
+  Origin: API_HOST,
+};
 
 // Some media fields (e.g. poster_image_url) come back as host-relative
 // paths like "/api/uploads/...", confirmed from a real network capture —

@@ -27,7 +27,7 @@ import {
   BlogComment,
   BlogDetail,
 } from "@/api/community";
-import { resolveMediaUrl } from "@/api/apiClient";
+import { API_HOST, resolveMediaUrl } from "@/api/apiClient";
 import { useAuth } from "@/context/AuthContext";
 import { COLORS } from "@/theme/colors";
 
@@ -115,8 +115,8 @@ export default function BlogDetailScreen() {
     }
   };
 
-  // Confirmed working web URL pattern for a blog post (movixa.duckdns.org/blog/{id}).
-  const shareUrl = `https://movixa.duckdns.org/blog/${blogId}`;
+  // The public URL pattern for a blog post on the live site.
+  const shareUrl = `${API_HOST}/blog/${blogId}`;
   const shareMessage = blog ? `${blog.title} — ${shareUrl}` : shareUrl;
 
   // These open the respective app directly with the content pre-filled —
@@ -276,7 +276,7 @@ export default function BlogDetailScreen() {
             />
           )}
           <View style={styles.captureLinkBand}>
-            <Text style={styles.captureLinkText}>Read more: movixa.duckdns.org</Text>
+            <Text style={styles.captureLinkText}>Read more: theomy.com</Text>
           </View>
         </View>
       </View>

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { SubAccount, fetchMySubAccounts, createSubAccount, deactivateSubAccount } from "@/api/subAccounts";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { SubAccount, fetchMySubAccounts, createSubAccount, deactivateSubAccount, setSubAccountMinor } from "@/api/subAccounts";
 import { extractErrorMessage } from "@/api/apiClient";
+import PinField, { isCompletePin } from "@/components/PinField";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 
 export default function FamilyAccountsCard() {
@@ -16,9 +17,52 @@ export default function FamilyAccountsCard() {
   // (backend rejects the request without it) — null means "not yet
   // chosen". See SubAccount's is_minor docstring: an adult-declared
   // sub-account fills in its own date of birth/city on its own first
-  // login; a minor never does, and this can't be changed later.
+  // login; a minor never does. Changeable afterwards from the badge on
+  // each row (Nov 2026), which is what the age restriction turns on.
   const [isMinor, setIsMinor] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // --- Changing an existing account's under-18 declaration ----------
+  // Turning it OFF opens age-restricted content up, so the server asks
+  // for the Family PIN when the family has one set. We send with no PIN
+  // first and let a 400 naming the PIN tell us to prompt — one copy of
+  // that rule, on the server.
+  const [minorTarget, setMinorTarget] = useState<SubAccount | null>(null);
+  const [minorNext, setMinorNext] = useState(false);
+  const [minorPin, setMinorPin] = useState("");
+  const [minorNeedsPin, setMinorNeedsPin] = useState(false);
+  const [minorBusy, setMinorBusy] = useState(false);
+  const [minorError, setMinorError] = useState("");
+
+  const openMinorDialog = (account: SubAccount) => {
+    setMinorTarget(account);
+    setMinorNext(!account.is_minor);
+    setMinorPin("");
+    setMinorNeedsPin(false);
+    setMinorError("");
+  };
+
+  const submitMinorChange = async () => {
+    if (!minorTarget) return;
+    setMinorError("");
+    setMinorBusy(true);
+    try {
+      const updated = await setSubAccountMinor(minorTarget.id, {
+        isMinor: minorNext,
+        pin: minorNeedsPin ? minorPin : undefined,
+      });
+      setSubAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      setMinorTarget(null);
+      setMinorPin("");
+    } catch (e: any) {
+      const msg = extractErrorMessage(e, "Couldn't save that change. Please try again.");
+      if (/family pin/i.test(msg) || /incorrect pin/i.test(msg)) setMinorNeedsPin(true);
+      setMinorError(msg);
+      setMinorPin("");
+    } finally {
+      setMinorBusy(false);
+    }
+  };
 
   const load = async () => {
     try {
@@ -99,9 +143,15 @@ export default function FamilyAccountsCard() {
                 <Text style={styles.accountName}>{account.name}</Text>
                 {!account.is_active && <Text style={styles.deactivatedTag}>DEACTIVATED</Text>}
                 {account.is_active && (
-                  <Text style={account.is_minor ? styles.minorTag : styles.adultTag}>
-                    {account.is_minor ? "MINOR" : "ADULT"}
-                  </Text>
+                  // The badge is also the control: tapping it is how a
+                  // parent corrects the declaration. Family accounts made
+                  // before this existed all start as MINOR, which is the
+                  // safe default but not always the true one.
+                  <TouchableOpacity onPress={() => openMinorDialog(account)}>
+                    <Text style={account.is_minor ? styles.minorTag : styles.adultTag}>
+                      {account.is_minor ? "MINOR" : "ADULT"}
+                    </Text>
+                  </TouchableOpacity>
                 )}
               </View>
               <Text style={styles.accountEmail}>{account.email}</Text>
@@ -166,7 +216,7 @@ export default function FamilyAccountsCard() {
               ? "This account will never be asked for date of birth or city."
               : isMinor === false
               ? "This account will be asked to add its own date of birth and city the first time it logs in."
-              : "This can't be changed later, so please choose carefully."}
+              : "You can change this later from this screen."}
           </Text>
 
           <View style={styles.addFormActions}>
@@ -193,6 +243,66 @@ export default function FamilyAccountsCard() {
           </TouchableOpacity>
         )
       )}
+
+      <Modal
+        visible={!!minorTarget}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !minorBusy && setMinorTarget(null)}
+      >
+        {/* The PIN field would otherwise sit under the keyboard on
+            Android, where edge-to-edge stops the window resizing on its
+            own — same reason Manage Profile needs one. */}
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior="padding">
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {minorNext ? "Mark as under 18" : "Mark as 18 or over"}
+            </Text>
+            <Text style={styles.modalBody}>
+              {minorNext
+                ? `${minorTarget?.name} will stop seeing age-restricted content, including 18+. Date of birth and city won't be asked for or kept for this account.`
+                : `${minorTarget?.name} will be able to watch age-restricted content, including 18+. Only do this if this account really is for someone 18 or over. We'll let you know by WhatsApp and email that this changed.`}
+            </Text>
+
+            {minorNeedsPin && (
+              <View style={{ marginBottom: SPACING.md }}>
+                <Text style={styles.questionLabel}>Enter your Family PIN to confirm</Text>
+                <PinField
+                  value={minorPin}
+                  onChange={setMinorPin}
+                  onEnter={submitMinorChange}
+                  disabled={minorBusy}
+                  accessibilityLabel="Family PIN"
+                  autoFocus
+                />
+              </View>
+            )}
+
+            {!!minorError && <Text style={styles.modalError}>{minorError}</Text>}
+
+            <View style={styles.addFormActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setMinorTarget(null)}
+                disabled={minorBusy}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveAccountButton}
+                onPress={submitMinorChange}
+                disabled={minorBusy || (minorNeedsPin && !isCompletePin(minorPin))}
+              >
+                {minorBusy ? (
+                  <ActivityIndicator size="small" color={COLORS.ctaText} />
+                ) : (
+                  <Text style={styles.saveAccountButtonText}>Confirm</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -262,4 +372,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveAccountButtonText: { ...TYPE.label, color: COLORS.ctaText, fontWeight: "800" },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: SPACING.lg,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    // Solid, not COLORS.surface: the surface tokens are translucent so
+    // the page gradient shows through them, which over a dimmed
+    // backdrop would leave this dialog barely readable.
+    backgroundColor: COLORS.burgundyDark,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.hairline,
+    padding: SPACING.lg,
+  },
+  modalTitle: { ...TYPE.section, color: COLORS.cream, marginBottom: SPACING.xs },
+  modalBody: { ...TYPE.caption, color: COLORS.textMuted, marginBottom: SPACING.md, lineHeight: 18 },
+  modalError: { ...TYPE.caption, color: COLORS.burgundyLight, marginBottom: SPACING.sm },
 });

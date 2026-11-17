@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import RNVideo from "react-native-video";
-import { getPlaybackSessionToken, resolveMediaUrl } from "@/api/apiClient";
+import { getPlaybackSessionToken, MEDIA_HEADERS, resolveMediaUrl } from "@/api/apiClient";
 import {
   fetchArchive,
   fetchPlays,
@@ -25,6 +25,7 @@ import { useAuth } from "@/context/AuthContext";
 import { CastMember, CrewMember, Video } from "@/types";
 import { COLORS } from "@/theme/colors";
 import { WEB_PURCHASE_NOTICE_VIDEO } from "@/utils/purchaseNotice";
+import { ageRatingLabel } from "@/shared/ageRatings";
 
 // video arrives via navigation params from PlaysBrowseScreen — the /videos
 // list endpoint already returns full detail, so there's no separate detail
@@ -103,7 +104,7 @@ export default function VideoDetailScreen() {
         item_id: video.id,
         title: video.title,
         image_url: video.poster_image_url,
-        meta: `${video.release_year} · ${video.age_rating}`,
+        meta: `${video.release_year} · ${ageRatingLabel(video.age_rating)}`,
         section: "Video Streaming",
       });
       setInMyList(res.saved);
@@ -197,10 +198,7 @@ export default function VideoDetailScreen() {
               // Same Bunny Stream Referer/Origin requirement as
               // VideoPlayerScreen — without these the trailer silently
               // fails and renders as a black box instead of erroring.
-              headers: {
-                Referer: "https://movixa.duckdns.org/",
-                Origin: "https://movixa.duckdns.org",
-              },
+              headers: MEDIA_HEADERS,
             }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
@@ -243,7 +241,7 @@ export default function VideoDetailScreen() {
         </View>
 
         <Text style={styles.meta}>
-          {video.release_year} · {video.duration_seconds ? `0h ${Math.round(video.duration_seconds / 60)}m` : ""} · {video.age_rating}
+          {video.release_year} · {video.duration_seconds ? `0h ${Math.round(video.duration_seconds / 60)}m` : ""} · {ageRatingLabel(video.age_rating)}
         </Text>
 
         {video.description && <Text style={styles.description}>{video.description}</Text>}
