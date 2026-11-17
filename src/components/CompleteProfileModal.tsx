@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { extractErrorMessage } from "@/api/apiClient";
@@ -23,21 +23,11 @@ import CityPicker from "./CityPicker";
 // needs_profile is true, which is never true for a declared minor.
 // ---------------------------------------------------------------------------
 
-// Same options as the web app's Gender select; "" means "Prefer not to say"
-// and is sent to the server as no value.
-const GENDER_OPTIONS: { value: string; label: string }[] = [
-  { value: "", label: "Prefer not to say" },
-  { value: "male", label: "Male" },
-  { value: "female", label: "Female" },
-  { value: "other", label: "Other" },
-];
-
 export default function CompleteProfileModal() {
   const { user, needsProfileCompletion, completeDemographics } = useAuth();
   const insets = useSafeAreaInsets();
   const [dob, setDob] = useState("");
   const [city, setCity] = useState("");
-  const [gender, setGender] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -58,7 +48,7 @@ export default function CompleteProfileModal() {
     setError(null);
     setSubmitting(true);
     try {
-      await completeDemographics({ dateOfBirth: dob, city: isIndia ? city.trim() : undefined, gender: gender || undefined });
+      await completeDemographics({ dateOfBirth: dob, city: isIndia ? city.trim() : undefined });
     } catch (e: any) {
       setError(extractErrorMessage(e));
     } finally {
@@ -67,26 +57,8 @@ export default function CompleteProfileModal() {
   };
 
   return (
-    <Modal
-      visible
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={() => {}}
-    >
-      {/* Edge-to-edge Android doesn't resize the window for the keyboard,
-          so lift the content by the keyboard height and let it scroll —
-          otherwise City / Gender / Continue end up under the keyboard. */}
-      <KeyboardAvoidingView style={styles.root} behavior="padding">
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={[
-            styles.backdrop,
-            { paddingTop: insets.top + SPACING.lg, paddingBottom: insets.bottom + SPACING.lg },
-          ]}
-          keyboardShouldPersistTaps="handled"
-        >
+    <Modal visible transparent animationType="fade" onRequestClose={() => {}}>
+      <View style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.card}>
           <Text style={styles.title}>Complete your profile</Text>
           <Text style={styles.subtitle}>
@@ -102,44 +74,21 @@ export default function CompleteProfileModal() {
             </View>
           )}
 
-          <View style={styles.genderWrap}>
-            <Text style={styles.fieldLabel}>Gender (optional)</Text>
-            <View style={styles.genderRow}>
-              {GENDER_OPTIONS.map((opt) => {
-                const active = gender === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value || "none"}
-                    style={[styles.genderChip, active && styles.genderChipActive]}
-                    onPress={() => setGender(opt.value)}
-                    disabled={submitting}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text style={[styles.genderChipText, active && styles.genderChipTextActive]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
           {error && <Text style={styles.error}>{error}</Text>}
 
           <TouchableOpacity style={styles.button} onPress={submit} disabled={submitting}>
             <Text style={styles.buttonText}>{submitting ? "Saving…" : "Continue"}</Text>
           </TouchableOpacity>
         </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "rgba(10,1,4,0.92)" },
-  flex: { flex: 1 },
   backdrop: {
-    flexGrow: 1,
+    flex: 1,
+    backgroundColor: "rgba(10,1,4,0.92)",
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: SPACING.lg,
@@ -155,20 +104,20 @@ const styles = StyleSheet.create({
   subtitle: { ...TYPE.caption, color: COLORS.textMuted, marginBottom: SPACING.lg },
   fieldLabel: { ...TYPE.caption, color: COLORS.textMuted, marginBottom: SPACING.xs },
   cityWrap: { marginTop: SPACING.xs },
-  genderWrap: { marginBottom: SPACING.md },
-  genderRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
-  genderChip: {
-    borderRadius: RADIUS.pill,
+  // A dark box with light text: the old burgundyLight text sat on the
+  // burgundy card, so the message was red on red and hard to read.
+  error: {
+    ...TYPE.caption,
+    color: "#FFD9D9",
+    backgroundColor: "rgba(10,1,4,0.55)",
     borderWidth: 1,
-    borderColor: COLORS.hairline,
-    backgroundColor: COLORS.burgundyDark,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
+    borderColor: "rgba(248,113,113,0.7)",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    lineHeight: 18,
+    marginBottom: SPACING.md,
   },
-  genderChipActive: { borderColor: COLORS.gold },
-  genderChipText: { ...TYPE.caption, color: COLORS.cream },
-  genderChipTextActive: { color: COLORS.gold, fontWeight: "700" },
-  error: { ...TYPE.caption, color: COLORS.burgundyLight, marginBottom: SPACING.md },
   button: {
     backgroundColor: COLORS.gold,
     borderRadius: RADIUS.pill,
