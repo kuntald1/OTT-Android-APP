@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { fetchMyList, MyListItem } from "@/api/mylist";
 import { fetchPlays, fetchArchive, toggleMyList } from "@/api/videos";
 import { fetchApprovedEvents, ApprovedEvent } from "@/api/ticketing";
@@ -55,13 +55,22 @@ export default function MyListScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await load();
-      setLoading(false);
-    })();
-  }, [load]);
+  // Reloads every time this tab comes into view, not just once on mount.
+  // Tabs stay mounted, so a one-time load meant an item added from a video
+  // page (the tick) never appeared here until a manual pull-to-refresh —
+  // and the empty state has no pull-to-refresh at all. The spinner shows
+  // only on the very first load; later visits refresh quietly.
+  const firstLoad = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        if (firstLoad.current) setLoading(true);
+        await load();
+        firstLoad.current = false;
+        setLoading(false);
+      })();
+    }, [load])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
