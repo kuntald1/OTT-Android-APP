@@ -20,6 +20,8 @@ import {
   completeDemographics as completeDemographicsRequest,
 } from "@/api/auth";
 import { fetchFamilyAccounts } from "@/api/family";
+import { claimReferral } from "@/api/referrals";
+import { clearPendingReferralCode, getPendingReferralCode } from "@/utils/pendingReferral";
 import { User } from "@/types";
 
 interface RegisterParams {
@@ -38,7 +40,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   needsProfileCompletion: boolean;
-  completeDemographics: (payload: { dateOfBirth: string; city?: string; gender?: string }) => Promise<void>;
+  completeDemographics: (payload: { dateOfBirth: string; city?: string }) => Promise<void>;
   hasFamily: boolean;
   familyPickerOpen: boolean;
   openFamilyPicker: () => void;
@@ -82,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const completeDemographics = useCallback(async (payload: { dateOfBirth: string; city?: string; gender?: string }) => {
+  const completeDemographics = useCallback(async (payload: { dateOfBirth: string; city?: string }) => {
     await completeDemographicsRequest(payload);
     setNeedsProfileCompletion(false);
   }, []);
@@ -192,17 +194,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       partialUser: Partial<User> & Pick<User, "id" | "name" | "email">
     ) => {
       await setStoredToken(token);
-      // The callback URL only carries id/name/email, so the user object
-      // built from it has no `country`. That hid the City field in
-      // "Complete your profile" while the server still required it for
-      // India accounts ("City is required."). Load the full user from
-      // /auth/me (same as session restore); fall back to the partial
-      // user if that call fails.
-      try {
-        const fullUser = await fetchCurrentUser();
-        setUser(fullUser);
-      } catch {
-        setUser({ role: "user", ...partialUser } as User);
+      setUser({ role: "user", ...partialUser } as User);
+      // An invite code typed on the Register screen before the person
+      // tapped Google/Facebook (utils/pendingReferral.ts). The Register
+      // screen is gone by now, so this is the only place that can hand it
+      // over — the same thing the website does with its stored ?ref= code.
+      //
+      // The token is in storage above, so apiClient's interceptor already
+      // sends it. The server decides whether the code applies (not your
+      // own, not a second one, not an account that has already paid) and
+      // answers { claimed: false, reason } instead of failing, so there is
+      // nothing to show either way. Cleared regardless, so a stale code
+      // can't attach itself to a later sign-in.
+      const pendingCode = await getPendingReferralCode();
+      if (pendingCode) {
+        try {
+          await claimReferral(pendingCode);
+        } catch {
+          // The account is theirs regardless.
+        }
+        await clearPendingReferralCode();
       }
       refreshProfileCompletionStatus();
       openFamilyPickerIfFamily();

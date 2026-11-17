@@ -135,7 +135,7 @@ export default function RegisterScreen() {
           <Text style={styles.heading}>Create your account</Text>
           <Text style={styles.subheading}>Login is required to browse theomy.</Text>
 
-          <SocialLoginRow />
+          <SocialLoginRow referralCode={referralCode} />
           <Text style={styles.orDivider}>or</Text>
 
           <TextInput

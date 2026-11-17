@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { COLORS } from "@/theme/colors";
 import { AUTH_CALLBACK_SCHEME, buildFacebookAuthUrl, buildGoogleAuthUrl } from "@/config/oauth";
 import { parseQueryParams } from "@/utils/url";
+import { setPendingReferralCode } from "@/utils/pendingReferral";
 
 // Facebook: opens the real Facebook OAuth dialog in an in-app browser tab
 // (expo-web-browser), watching for the redirect back to theomy://auth-callback.
@@ -15,13 +16,21 @@ import { parseQueryParams } from "@/utils/url";
 //
 // Google: no confirmed OAuth initiation URL yet (no network capture from
 // the site's "Continue with Google" button) — still a placeholder.
-export default function SocialLoginRow() {
+export default function SocialLoginRow({
+  referralCode,
+}: {
+  // An invite code typed on the Register screen. Parked in storage before
+  // the browser opens, because this screen is gone by the time the account
+  // exists — AuthContext.loginWithOAuthToken claims it on the way back.
+  referralCode?: string;
+} = {}) {
   const { loginWithOAuthToken } = useAuth();
   const [loadingProvider, setLoadingProvider] = useState<"google" | "facebook" | null>(null);
 
   const handleFacebook = async () => {
     setLoadingProvider("facebook");
     try {
+      if (referralCode?.trim()) await setPendingReferralCode(referralCode);
       const result = await WebBrowser.openAuthSessionAsync(
         buildFacebookAuthUrl(),
         AUTH_CALLBACK_SCHEME
@@ -51,6 +60,7 @@ export default function SocialLoginRow() {
   const handleGoogle = async () => {
     setLoadingProvider("google");
     try {
+      if (referralCode?.trim()) await setPendingReferralCode(referralCode);
       const result = await WebBrowser.openAuthSessionAsync(
         buildGoogleAuthUrl(),
         AUTH_CALLBACK_SCHEME
