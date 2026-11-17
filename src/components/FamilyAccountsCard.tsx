@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SubAccount, fetchMySubAccounts, createSubAccount, deactivateSubAccount, setSubAccountMinor } from "@/api/subAccounts";
 import { extractErrorMessage } from "@/api/apiClient";
 import PinField, { isCompletePin } from "@/components/PinField";
+import ThemedAlert, { ThemedAlertState } from "@/components/ThemedAlert";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 
 export default function FamilyAccountsCard({
@@ -12,6 +13,8 @@ export default function FamilyAccountsCard({
   // fields gets focus, so the screen can scroll it above the keyboard.
   onFormFocus?: (formY: number) => void;
 } = {}) {
+  // The app's own dialog instead of the white native Alert.alert.
+  const [alertState, setAlertState] = useState<ThemedAlertState>(null);
   const formY = useRef(0);
   const focusForm = () => onFormFocus?.(formY.current);
   const [subAccounts, setSubAccounts] = useState<SubAccount[]>([]);
@@ -90,11 +93,11 @@ export default function FamilyAccountsCard({
 
   const onAdd = async () => {
     if (!name.trim() || !email.trim() || password.length < 8) {
-      Alert.alert("Missing info", "Name, email, and a password of at least 8 characters are required.");
+      setAlertState({ title: "Missing info", body: "Name, email, and a password of at least 8 characters are required." });
       return;
     }
     if (isMinor === null) {
-      Alert.alert("One more thing", "Please say whether this account is for someone under 18.");
+      setAlertState({ title: "One more thing", body: "Please say whether this account is for someone under 18." });
       return;
     }
     setSaving(true);
@@ -107,28 +110,32 @@ export default function FamilyAccountsCard({
       setPassword("");
       setIsMinor(null);
     } catch (e: any) {
-      Alert.alert("Couldn't add account", extractErrorMessage(e, "Something went wrong creating this account. Please try again."));
+      setAlertState({ title: "Couldn't add account", body: extractErrorMessage(e, "Something went wrong creating this account. Please try again.") });
     } finally {
       setSaving(false);
     }
   };
 
   const onDeactivate = (account: SubAccount) => {
-    Alert.alert("Deactivate account?", `${account.name} will lose access.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Deactivate",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const updated = await deactivateSubAccount(account.id);
-            setSubAccounts((prev) => prev.map((a) => (a.id === account.id ? updated : a)));
-          } catch {
-            Alert.alert("Couldn't deactivate", "Something went wrong. Please try again.");
-          }
+    setAlertState({
+      title: "Deactivate account?",
+      body: `${account.name} will lose access.`,
+      buttons: [
+        { label: "Cancel", style: "cancel" },
+        {
+          label: "Deactivate",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const updated = await deactivateSubAccount(account.id);
+              setSubAccounts((prev) => prev.map((a) => (a.id === account.id ? updated : a)));
+            } catch {
+              setAlertState({ title: "Couldn't deactivate", body: "Something went wrong. Please try again." });
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   const activeCount = subAccounts.filter((a) => a.is_active).length;
@@ -314,6 +321,7 @@ export default function FamilyAccountsCard({
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      <ThemedAlert alert={alertState} onClose={() => setAlertState(null)} />
     </View>
   );
 }
