@@ -1,11 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SubAccount, fetchMySubAccounts, createSubAccount, deactivateSubAccount, setSubAccountMinor } from "@/api/subAccounts";
 import { extractErrorMessage } from "@/api/apiClient";
 import PinField, { isCompletePin } from "@/components/PinField";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 
-export default function FamilyAccountsCard() {
+export default function FamilyAccountsCard({
+  onFormFocus,
+}: {
+  // Called with the add-form's y inside this card whenever one of its
+  // fields gets focus, so the screen can scroll it above the keyboard.
+  onFormFocus?: (formY: number) => void;
+} = {}) {
+  const formY = useRef(0);
+  const focusForm = () => onFormFocus?.(formY.current);
   const [subAccounts, setSubAccounts] = useState<SubAccount[]>([]);
   const [maxAllowed, setMaxAllowed] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -166,12 +174,13 @@ export default function FamilyAccountsCard() {
       )}
 
       {adding ? (
-        <View style={styles.addForm}>
+        <View style={styles.addForm} onLayout={(e) => { formY.current = e.nativeEvent.layout.y; }}>
           <TextInput
             style={styles.input}
             value={name}
             onChangeText={setName}
             placeholder="Name"
+            onFocus={focusForm}
             placeholderTextColor={COLORS.textFaint}
           />
           <TextInput
@@ -179,6 +188,7 @@ export default function FamilyAccountsCard() {
             value={email}
             onChangeText={setEmail}
             placeholder="Email"
+            onFocus={focusForm}
             keyboardType="email-address"
             autoCapitalize="none"
             placeholderTextColor={COLORS.textFaint}
@@ -188,6 +198,7 @@ export default function FamilyAccountsCard() {
             value={password}
             onChangeText={setPassword}
             placeholder="Password (min. 8 characters)"
+            onFocus={focusForm}
             secureTextEntry
             placeholderTextColor={COLORS.textFaint}
           />

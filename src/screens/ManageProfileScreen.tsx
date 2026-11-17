@@ -30,6 +30,7 @@ export default function ManageProfileScreen() {
   // has had a moment to appear brings it back into view; the
   // KeyboardAvoidingView below is what makes that room exist at all.
   const scrollRef = useRef<ScrollView>(null);
+  const familyCardY = useRef(0);
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState(user?.phone || "");
@@ -218,7 +219,18 @@ export default function ManageProfileScreen() {
 
         {user?.role === "plays_organiser" && <OrganiserAboutSections organiserName={user.name} />}
 
-        <FamilyAccountsCard />
+        <View onLayout={(e) => { familyCardY.current = e.nativeEvent.layout.y; }}>
+          <FamilyAccountsCard
+            onFormFocus={(formY) => {
+              // Put the top of the add form at the top of the visible area
+              // so name, email and password all sit above the keyboard.
+              setTimeout(
+                () => scrollRef.current?.scrollTo({ y: Math.max(0, familyCardY.current + formY - 8), animated: true }),
+                300
+              );
+            }}
+          />
+        </View>
         <FamilyPinSection
           onStartEditing={() => {
             // The delay lets the keyboard finish animating in, otherwise
