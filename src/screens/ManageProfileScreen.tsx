@@ -18,6 +18,7 @@ import { updateProfile, uploadProfilePhoto, changePassword } from "@/api/auth";
 import { resolveMediaUrl } from "@/api/apiClient";
 import { COLORS, RADIUS, SPACING, TYPE } from "@/theme";
 import GradientBackground from "@/components/GradientBackground";
+import AutoRenewCard from "@/components/AutoRenewCard";
 import OrganiserAboutSections from "@/components/OrganiserAboutSections";
 import FamilyAccountsCard from "@/components/FamilyAccountsCard";
 import FamilyPinSection from "@/components/FamilyPinSection";
@@ -216,6 +217,11 @@ export default function ManageProfileScreen() {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Renders nothing unless a mandate is actually running. A
+            sub-account doesn't hold the plan, so there is nothing for it
+            to cancel — the parent holds the mandate. */}
+        {!user?.parent_id && <AutoRenewCard />}
 
         {user?.role === "plays_organiser" && <OrganiserAboutSections organiserName={user.name} />}
 
