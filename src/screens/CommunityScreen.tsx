@@ -218,6 +218,17 @@ export default function CommunityScreen() {
                     {b.status === "rejected" && !!b.review_note && (
                       <Text style={styles.myPostNote}>What needs changing: {b.review_note}</Text>
                     )}
+                    {/* Editable right up until an editor publishes it.
+                        On a rejected post this is the whole point of the
+                        reason above — saving sends it back for review. */}
+                    <TouchableOpacity
+                      style={styles.myPostEdit}
+                      onPress={() => navigation.navigate("CreateBlog", { post: b })}
+                    >
+                      <Text style={styles.myPostEditText}>
+                        {b.status === "rejected" ? "Edit and resubmit" : "Edit post"}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 ))}
 
@@ -450,6 +461,8 @@ const styles = StyleSheet.create({
   myPostBadgeBad: { color: "#f87171" },
   myPostTitle: { color: COLORS.cream, fontSize: 14, fontWeight: "700", marginTop: 4 },
   myPostNote: { color: "#f87171", fontSize: 12, marginTop: 6, lineHeight: 17 },
+  myPostEdit: { marginTop: 10, alignSelf: "flex-start" },
+  myPostEditText: { color: COLORS.gold, fontSize: 13, fontWeight: "700" },
   sectionEmpty: {
     color: COLORS.cream,
     opacity: 0.6,

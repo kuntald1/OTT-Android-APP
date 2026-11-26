@@ -65,6 +65,33 @@ export async function fetchMyBlogs(): Promise<Blog[]> {
   return data;
 }
 
+// Revising a post that hasn't gone live. Editing a REJECTED one puts it
+// back in the queue and re-alerts the admins; editing a pending one
+// doesn't, since it is already on their list. The server decides that.
+export async function updateMyBlog(
+  id: string,
+  payload: { title: string; excerpt: string; body: string }
+): Promise<Blog> {
+  const { data } = await apiClient.put<Blog>(`/blogs/${id}`, payload);
+  return data;
+}
+
+// The author's own cover picture, for a post not yet published.
+// React Native's FormData takes { uri, name, type } rather than a File,
+// and the Content-Type header must be set explicitly here because the
+// shared apiClient defaults it to application/json.
+export async function uploadMyBlogCover(
+  id: string,
+  image: { uri: string; name: string; type: string }
+): Promise<Blog> {
+  const form = new FormData();
+  form.append("file", image as any);
+  const { data } = await apiClient.post<Blog>(`/blogs/${id}/cover`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
 // Confirmed: GET /blogs/{id} -> BlogDetail (includes body).
 export async function fetchBlogDetail(id: string): Promise<BlogDetail> {
   const { data } = await apiClient.get<BlogDetail>(`/blogs/${id}`);

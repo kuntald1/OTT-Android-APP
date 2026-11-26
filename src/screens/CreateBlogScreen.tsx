@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -10,10 +11,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { submitBlog } from "@/api/community";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
+import { fetchBlogDetail, submitBlog, updateMyBlog, uploadMyBlogCover } from "@/api/community";
+import { resolveMediaUrl } from "@/api/apiClient";
 import { COLORS } from "@/theme/colors";
 import GradientBackground from "@/components/GradientBackground";
+import ThemedAlert, { ThemedAlertState } from "@/components/ThemedAlert";
 
 // Writing a post from the app. What a member submits here does NOT go
 // live — it joins the admin review queue, and the admins are messaged
@@ -23,24 +27,104 @@ import GradientBackground from "@/components/GradientBackground";
 // sending. Somebody who expects to see their words on the site within
 // the minute and doesn't would reasonably conclude it failed.
 const MAX_EXCERPT = 500;
+const MAX_COVER_MB = 5;
 
 export default function CreateBlogScreen() {
   const navigation = useNavigation<any>();
-  const [title, setTitle] = useState("");
-  const [excerpt, setExcerpt] = useState("");
+  const route = useRoute<any>();
+  // Passed when editing one of your own drafts; absent when writing a
+  // new post. Only a post that is NOT yet published can be edited, and
+  // the server enforces that too — this screen only decides what to show.
+  const existing = route.params?.post || null;
+  const editing = !!existing;
+
+  const [title, setTitle] = useState(existing?.title || "");
+  const [excerpt, setExcerpt] = useState(existing?.excerpt || "");
   const [body, setBody] = useState("");
+  // The list this screen opens from carries no body, so fetch it. The
+  // box stays disabled until it arrives rather than showing an empty
+  // field somebody might type into and overwrite their draft with.
+  const [loadingBody, setLoadingBody] = useState(editing);
+  const [coverUri, setCoverUri] = useState<string | null>(
+    existing?.cover_image_url ? resolveMediaUrl(existing.cover_image_url) : null
+  );
+  const [coverPicked, setCoverPicked] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [alert, setAlert] = useState<ThemedAlertState>(null);
 
-  const canSubmit = !!title.trim() && !!excerpt.trim() && !!body.trim() && !saving;
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    fetchBlogDetail(existing.id)
+      .then((full) => {
+        if (!cancelled) setBody(full.body || "");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Couldn't load your draft. Go back and try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBody(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editing, existing?.id]);
+
+  const canSubmit =
+    !!title.trim() && !!excerpt.trim() && !!body.trim() && !saving && !loadingBody;
+
+  const handlePickCover = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setAlert({
+        title: "Permission needed",
+        body: "Allow photo library access to choose a cover image.",
+      });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      // Roughly the shape the cover is shown at on the site and in the
+      // app list, so what they crop is what they get.
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    if (asset.fileSize && asset.fileSize > MAX_COVER_MB * 1024 * 1024) {
+      setAlert({ title: "Image too large", body: `Please choose an image under ${MAX_COVER_MB}MB.` });
+      return;
+    }
+    // The server only accepts JPEG, PNG and WEBP and decides the stored
+    // name from the type it validates, so send a real one rather than
+    // whatever the library guessed from the file name.
+    const type = asset.mimeType && asset.mimeType.startsWith("image/") ? asset.mimeType : "image/jpeg";
+    setError("");
+    setCoverUri(asset.uri);
+    setCoverPicked({ uri: asset.uri, name: asset.fileName || "cover.jpg", type });
+  };
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSaving(true);
     setError("");
     try {
-      await submitBlog({ title: title.trim(), excerpt: excerpt.trim(), body: body.trim() });
+      const fields = { title: title.trim(), excerpt: excerpt.trim(), body: body.trim() };
+      const saved = editing ? await updateMyBlog(existing.id, fields) : await submitBlog(fields);
+      // Cover second: it needs the post's id, and a failed image must
+      // not lose the writing. If this throws the post is already saved,
+      // and the message says exactly that.
+      if (coverPicked) {
+        try {
+          await uploadMyBlogCover(saved.id, coverPicked);
+        } catch {
+          setError("Your post was sent, but the cover image didn't upload. You can add it by editing the post.");
+        }
+      }
       setDone(true);
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Couldn't send your post. Please try again.");
@@ -61,7 +145,7 @@ export default function CreateBlogScreen() {
           </Text>
           <Text style={styles.doneBody}>
             Until then it sits under <Text style={styles.bold}>Your posts</Text> on the Blog
-            section, where you can read it back.
+            section, where you can read it back and keep editing it.
           </Text>
           <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.goBack()}>
             <Text style={styles.primaryButtonText}>Done</Text>
@@ -83,9 +167,31 @@ export default function CreateBlogScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.intro}>
-            An editor reads every post before it goes on the site. Yours will appear once it's
-            approved — we'll message you either way.
+            {editing
+              ? "You can keep changing this until an editor publishes it. Saving a post that was turned down sends it back for review."
+              : "An editor reads every post before it goes on the site. Yours will appear once it's approved — we'll message you either way."}
           </Text>
+
+          {/* Cover first: it is the field people forget exists if it
+              sits under a long body box. */}
+          <Text style={styles.label}>COVER IMAGE</Text>
+          <View style={styles.coverRow}>
+            {coverUri ? (
+              <Image source={{ uri: coverUri }} style={styles.coverPreview} />
+            ) : (
+              <View style={[styles.coverPreview, styles.coverEmpty]}>
+                <Text style={styles.coverEmptyText}>No cover</Text>
+              </View>
+            )}
+            <View style={styles.coverActions}>
+              <TouchableOpacity style={styles.coverButton} onPress={handlePickCover}>
+                <Text style={styles.coverButtonText}>
+                  {coverUri ? "Change cover image" : "Add cover image"}
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.coverHint}>Optional · up to {MAX_COVER_MB}MB</Text>
+            </View>
+          </View>
 
           <Text style={styles.label}>TITLE</Text>
           <TextInput
@@ -117,9 +223,10 @@ export default function CreateBlogScreen() {
             value={body}
             onChangeText={setBody}
             multiline
+            editable={!loadingBody}
             numberOfLines={12}
             textAlignVertical="top"
-            placeholder="Write it here. Leave a blank line between paragraphs."
+            placeholder={loadingBody ? "Loading your draft…" : "Write it here. Leave a blank line between paragraphs."}
             placeholderTextColor="rgba(245,235,221,0.35)"
           />
 
@@ -137,11 +244,14 @@ export default function CreateBlogScreen() {
             {saving ? (
               <ActivityIndicator color={COLORS.ctaText} size="small" />
             ) : (
-              <Text style={styles.primaryButtonText}>Send for review</Text>
+              <Text style={styles.primaryButtonText}>
+                {editing ? "Save and send for review" : "Send for review"}
+              </Text>
             )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ThemedAlert alert={alert} onClose={() => setAlert(null)} />
     </GradientBackground>
   );
 }
@@ -170,6 +280,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   multiline: { minHeight: 76 },
+  coverRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  coverPreview: {
+    width: 128,
+    height: 72,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(212,175,55,0.3)",
+    backgroundColor: "rgba(0,0,0,0.2)",
+  },
+  coverEmpty: { alignItems: "center", justifyContent: "center", borderStyle: "dashed" },
+  coverEmptyText: { color: COLORS.cream, opacity: 0.35, fontSize: 11 },
+  coverActions: { flex: 1 },
+  coverButton: {
+    borderWidth: 1,
+    borderColor: COLORS.gold,
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    alignItems: "center",
+  },
+  coverButtonText: { color: COLORS.gold, fontSize: 13, fontWeight: "600" },
+  coverHint: { color: COLORS.cream, opacity: 0.35, fontSize: 11, marginTop: 6, textAlign: "center" },
   bodyInput: { minHeight: 240, lineHeight: 21 },
   counter: {
     color: COLORS.cream,
