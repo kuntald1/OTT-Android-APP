@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import RNVideo from "react-native-video";
@@ -40,6 +41,13 @@ export default function FeaturedCarousel({
   // at a time, so a single flag is enough) — starts unmuted to match the
   // existing autoplay behavior, user can tap to mute.
   const [muted, setMuted] = useState(false);
+  // This carousel lives on a tab screen, which React Navigation keeps
+  // MOUNTED when you push VideoDetail/VideoPlayer on top of it. Without
+  // this gate the trailer kept playing — and kept making sound — behind
+  // the video the person actually opened, which is what you'd hear the
+  // moment you paused that video. Pausing on blur also stops a preview
+  // running invisibly under every other pushed screen.
+  const isFocused = useIsFocused();
 
   const handleScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / STEP);
@@ -83,9 +91,9 @@ export default function FeaturedCarousel({
                   }}
                   style={StyleSheet.absoluteFill}
                   resizeMode="cover"
-                  muted={muted}
+                  muted={muted || !isFocused}
                   repeat
-                  paused={false}
+                  paused={!isFocused}
                 />
               ) : (
                 <Image

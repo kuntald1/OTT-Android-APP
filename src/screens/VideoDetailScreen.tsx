@@ -2,14 +2,13 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useIsFocused, useNavigation, useRoute } from "@react-navigation/native";
 import RNVideo from "react-native-video";
 import { getPlaybackSessionToken, MEDIA_HEADERS, resolveMediaUrl } from "@/api/apiClient";
 import {
@@ -17,15 +16,15 @@ import {
   fetchPlays,
   fetchRecommendations,
   startPlaybackSession,
-  toggleLike,
   toggleMyList,
 } from "@/api/videos";
-import { onSubscriptionChanged } from "@/hooks/useSubscriptionAccess";
+import { onSubscriptionChanged, useSubscriptionAccess } from "@/hooks/useSubscriptionAccess";
 import { useAuth } from "@/context/AuthContext";
 import { CastMember, CrewMember, Video } from "@/types";
 import { COLORS } from "@/theme/colors";
 import { WEB_PURCHASE_NOTICE_VIDEO } from "@/utils/purchaseNotice";
 import { ageRatingLabel } from "@/shared/ageRatings";
+import ThemedAlert, { ThemedAlertState } from "@/components/ThemedAlert";
 
 // video arrives via navigation params from PlaysBrowseScreen — the /videos
 // list endpoint already returns full detail, so there's no separate detail
@@ -36,18 +35,18 @@ export default function VideoDetailScreen() {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
   const { user } = useAuth();
+  const { hasPlay, hasArchive, isSubscribed } = useSubscriptionAccess();
+  const isFocused = useIsFocused();
   const video: Video = route.params.video;
   const fallbackRelated: Video[] = route.params.relatedVideos || [];
 
-  const [liked, setLiked] = useState(video.liked_by_me);
-  const [likesCount, setLikesCount] = useState(video.likes_count);
   const [inMyList, setInMyList] = useState(video.in_my_list);
   const [startingPlayback, setStartingPlayback] = useState(false);
   // Themed replacement for the native Alert.alert — the OS dialog
   // can't be styled to match the app (plain white/system look), so
-  // playback-blocking messages (screens limit, connection failure) use
-  // this instead.
-  const [alertMessage, setAlertMessage] = useState<{ title: string; body: string } | null>(null);
+  // playback-blocking messages (screens limit, connection failure,
+  // "subscription required") use this instead.
+  const [alertMessage, setAlertMessage] = useState<ThemedAlertState>(null);
   const [recommended, setRecommended] = useState<Video[]>(fallbackRelated);
   const [trailerFailed, setTrailerFailed] = useState(false);
 
@@ -84,19 +83,6 @@ export default function VideoDetailScreen() {
     [video.id, navigation]
   );
 
-  const handleToggleLike = async () => {
-    setLiked(!liked);
-    setLikesCount((c) => (liked ? c - 1 : c + 1));
-    try {
-      const res = await toggleLike(video.id);
-      setLiked(res.liked);
-      setLikesCount(res.likes_count);
-    } catch {
-      setLiked(liked);
-      setLikesCount(likesCount);
-    }
-  };
-
   const handleToggleMyList = async () => {
     setInMyList(!inMyList);
     try {
@@ -113,7 +99,75 @@ export default function VideoDetailScreen() {
     }
   };
 
+  // What the section this video sits in is called on the plans page, so
+  // the message can name the exact plan to buy rather than "a plan".
+  const sectionLabel =
+    video.section === "archive" ? "Heritage" : video.section === "play" ? "Contemporary" : null;
+
+  // Second opinion on access, for the case the video object itself is
+  // stale or came from a list that didn't carry the real has_access (a
+  // recommendation row, a search result). It asks the same question the
+  // header's Contemporary/Heritage pills ask, so a Heritage video and the
+  // Heritage pill can never disagree about whether this person is in.
+  //
+  // Only ever applied to subscription_only content: a pay-per-video the
+  // person BOUGHT, and a free video, are watchable with no plan at all,
+  // and must not be caught by a plan check. isSubscribed === null means
+  // "couldn't tell" (logged out, network error) — that blocks nothing
+  // here, exactly as it blocks no pill.
+  const planMissing =
+    video.monetization_type === "subscription_only" &&
+    (isSubscribed === false ||
+      (video.section === "archive" && !hasArchive) ||
+      (video.section === "play" && !hasPlay));
+
+  // has_access === true is the server's own yes and always wins; the plan
+  // check above is only consulted when the video didn't bring a no of its own.
+  const locked = video.has_access === false || (video.has_access !== true && planMissing);
+
+  // Play is now shown on every video, locked or not — a greyed-out or
+  // absent button left people guessing what the video even was. Tapping a
+  // locked one explains what's missing and offers the way out, instead of
+  // starting a stream the server would refuse anyway.
+  const showLockedMessage = () => {
+    if (video.monetization_type === "pay_per_video") {
+      setAlertMessage({
+        title: "This video is bought on its own",
+        body: video.pricing
+          ? `${WEB_PURCHASE_NOTICE_VIDEO} It costs ₹${video.pricing.price_inr}.`
+          : WEB_PURCHASE_NOTICE_VIDEO,
+      });
+      return;
+    }
+    if (user?.parent_id) {
+      // A sub-account can't buy a plan, so sending it to the plans page
+      // would be a dead end — name who can instead.
+      setAlertMessage({
+        title: "Subscription required",
+        body: `Ask the main account holder to add ${sectionLabel || "a plan"} to watch this.`,
+      });
+      return;
+    }
+    setAlertMessage({
+      title: "Subscription required",
+      // Same two sentences as the header's pill alert, so the app says
+      // one thing about a missing plan wherever you meet it.
+      body:
+        isSubscribed === false
+          ? `You don't have an active plan yet. Subscribe to watch ${sectionLabel || "this"}.`
+          : `${sectionLabel || "This video"} isn't included in your current plan. View plans to get access?`,
+      buttons: [
+        { label: "Not now", style: "cancel" },
+        { label: "Yes, view plans", onPress: () => navigation.navigate("SubscriptionPlans") },
+      ],
+    });
+  };
+
   const handlePlay = async () => {
+    if (locked) {
+      showLockedMessage();
+      return;
+    }
     setStartingPlayback(true);
     try {
       const sessionToken = await getPlaybackSessionToken();
@@ -202,9 +256,13 @@ export default function VideoDetailScreen() {
             }}
             style={StyleSheet.absoluteFill}
             resizeMode="cover"
-            muted={false}
+            // Silenced and stopped the moment this screen is no longer the
+            // one on top — otherwise the preview carried on playing under
+            // the video player pushed over it, and its sound came through
+            // whenever the actual video was paused.
+            muted={!isFocused}
             repeat
-            paused={false}
+            paused={!isFocused}
             onError={() => setTrailerFailed(true)}
           />
         ) : (
@@ -219,23 +277,20 @@ export default function VideoDetailScreen() {
         <Text style={styles.title}>{video.title}</Text>
 
         <View style={styles.actionRow}>
-          {video.has_access !== false && (
-            <TouchableOpacity style={styles.playButton} onPress={handlePlay} disabled={startingPlayback}>
-              {startingPlayback ? (
-                <ActivityIndicator color={COLORS.ctaText} size="small" />
-              ) : (
-                <Text style={styles.playButtonText}>▶ Play</Text>
-              )}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.playButton} onPress={handlePlay} disabled={startingPlayback}>
+            {startingPlayback ? (
+              <ActivityIndicator color={COLORS.ctaText} size="small" />
+            ) : (
+              <Text style={styles.playButtonText}>▶ Play</Text>
+            )}
+          </TouchableOpacity>
+          {/* Add-to-My-List only. The thumbs-up that used to sit beside it
+              is gone at the client's request — a like count on a theatre
+              recording wasn't earning its place next to Play. The backend
+              route and the stored likes are untouched. */}
           <TouchableOpacity style={styles.iconButton} onPress={handleToggleMyList}>
             <Text style={[styles.iconButtonText, inMyList && styles.iconButtonTextActive]}>
               {inMyList ? "✓" : "+"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={handleToggleLike}>
-            <Text style={[styles.iconButtonText, liked && styles.iconButtonTextActive]}>
-              👍 {likesCount}
             </Text>
           </TouchableOpacity>
         </View>
@@ -246,20 +301,17 @@ export default function VideoDetailScreen() {
 
         {video.description && <Text style={styles.description}>{video.description}</Text>}
 
-        {/* Explicitly === false — see the resolveFullVideo fix in
-            PlaysBrowseScreen.tsx/ArchiveScreen.tsx for the real fix
-            (cross-section videos now resolve to their true
-            has_access); this is only a backup for the rare case a
-            video isn't found in either pool. Genuinely unknown access
-            should never show this box — real enforcement still
-            happens server-side when the stream itself is requested.
+        {/* Same `locked` the Play button uses, so the hint written here
+            and the dialog a Play tap opens can never disagree. It is
+            still only a hint — real enforcement happens server-side when
+            the stream itself is requested.
 
             Message is specific to THIS video's own section (Play or
             Archive) rather than a generic "a subscription is needed" —
             a Play-only subscriber hitting an Archive video should be
             told exactly what to add ("Subscribe to Archive"), not left
             to guess which of the two plans covers it. */}
-        {video.has_access === false && video.monetization_type === "pay_per_video" && (
+        {locked && video.monetization_type === "pay_per_video" && (
           <View style={styles.lockedBox}>
             <Text style={styles.lockedText}>
               {video.pricing
@@ -270,7 +322,7 @@ export default function VideoDetailScreen() {
           </View>
         )}
 
-        {video.has_access === false && video.monetization_type !== "pay_per_video" && (
+        {locked && video.monetization_type !== "pay_per_video" && (
           <TouchableOpacity
             style={styles.lockedBox}
             onPress={() => navigation.navigate("SubscriptionPlans")}
@@ -357,49 +409,15 @@ export default function VideoDetailScreen() {
       </View>
     </ScrollView>
 
-    <Modal visible={!!alertMessage} transparent animationType="fade" onRequestClose={() => setAlertMessage(null)}>
-      <View style={styles.alertOverlay}>
-        <View style={styles.alertBox}>
-          <Text style={styles.alertTitle}>{alertMessage?.title}</Text>
-          <Text style={styles.alertBody}>{alertMessage?.body}</Text>
-          <TouchableOpacity style={styles.alertButton} onPress={() => setAlertMessage(null)}>
-            <Text style={styles.alertButtonText}>OK</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+    {/* Was a copy of ThemedAlert's markup inlined here; now the shared
+        component, which looks identical but also takes buttons — needed
+        for the "Not now / Yes, view plans" pair. */}
+    <ThemedAlert alert={alertMessage} onClose={() => setAlertMessage(null)} />
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  alertOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  alertBox: {
-    width: "100%",
-    maxWidth: 340,
-    backgroundColor: COLORS.burgundyDark,
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(212,175,55,0.35)",
-  },
-  alertTitle: { color: COLORS.cream, fontSize: 17, fontWeight: "700", marginBottom: 8 },
-  alertBody: { color: COLORS.cream, opacity: 0.85, fontSize: 14, lineHeight: 20 },
-  alertButton: {
-    alignSelf: "flex-end",
-    marginTop: 18,
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: COLORS.gold,
-  },
-  alertButtonText: { color: COLORS.ctaText, fontSize: 14, fontWeight: "700" },
   container: { flex: 1, backgroundColor: COLORS.background },
   poster: {
     width: "100%",

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -19,6 +19,7 @@ import {
 import { resolveMediaUrl, extractErrorMessage } from "@/api/apiClient";
 import { useAuth } from "@/context/AuthContext";
 import { COLORS } from "@/theme/colors";
+import SearchField from "@/components/SearchField";
 
 // ---------------------------------------------------------------------------
 // Donating does NOT take a payment here. theomy shows the organiser's
@@ -36,6 +37,7 @@ export default function OrganisersScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Organiser | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -48,6 +50,12 @@ export default function OrganisersScreen() {
       }
     })();
   }, []);
+
+  const needle = query.trim().toLowerCase();
+  const filtered = useMemo(
+    () => (needle ? organisers.filter((o) => o.name.toLowerCase().includes(needle)) : organisers),
+    [organisers, needle]
+  );
 
   if (loading) {
     return (
@@ -62,6 +70,15 @@ export default function OrganisersScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Support a Plays Organiser</Text>
         <Text style={styles.subtitle}>Donate directly to registered organisers on theomy.</Text>
+        {/* Same box as every other Community list. The directory grows
+            with each organiser who signs up, so scrolling for a name you
+            already know stops being reasonable quite quickly. */}
+        <SearchField
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search organisers"
+          style={styles.search}
+        />
       </View>
 
       {error ? (
@@ -70,9 +87,15 @@ export default function OrganisersScreen() {
         </View>
       ) : (
         <FlatList
-          data={organisers}
+          data={filtered}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {needle ? `No organiser matches "${query.trim()}".` : "No organisers listed yet."}
+            </Text>
+          }
           renderItem={({ item }) => {
             const isMe = !!user && item.id === user.id;
             return (
@@ -213,6 +236,8 @@ const styles = StyleSheet.create({
   header: { padding: 16 },
   title: { color: COLORS.cream, fontSize: 22, fontWeight: "800" },
   subtitle: { color: COLORS.cream, opacity: 0.7, fontSize: 13, marginTop: 6 },
+  search: { marginTop: 14 },
+  empty: { color: COLORS.cream, opacity: 0.6, fontSize: 14, textAlign: "center", marginTop: 32 },
   list: { paddingHorizontal: 16, paddingBottom: 16 },
   card: {
     flexDirection: "row",

@@ -12,6 +12,7 @@ import OrganisersScreen from "@/screens/OrganisersScreen";
 import RoomDetailScreen from "@/screens/RoomDetailScreen";
 import TicketDetailScreen from "@/screens/TicketDetailScreen";
 import BlogDetailScreen from "@/screens/BlogDetailScreen";
+import CommunityListScreen from "@/screens/CommunityListScreen";
 import VideoDetailScreen from "@/screens/VideoDetailScreen";
 import FilteredVideosScreen from "@/screens/FilteredVideosScreen";
 import StudioProfileScreen from "@/screens/StudioProfileScreen";
@@ -79,6 +80,15 @@ function AppStack() {
       <Stack.Screen name="LiveWatch" component={LiveWatchScreen} options={{ title: "Live" }} />
       <Stack.Screen name="BlogDetail" component={BlogDetailScreen} options={{ title: "" }} />
       <Stack.Screen name="Organisers" component={OrganisersScreen} options={{ title: "Organisers" }} />
+      {/* "View all" from a Community section — the header title says which
+          list you landed in, since one screen serves both. */}
+      <Stack.Screen
+        name="CommunityList"
+        component={CommunityListScreen}
+        options={({ route }: any) => ({
+          title: route.params?.kind === "rooms" ? "Community Rooms" : "Blog",
+        })}
+      />
       <Stack.Screen name="RoomDetail" component={RoomDetailScreen} options={{ title: "Room" }} />
       <Stack.Screen name="TicketDetail" component={TicketDetailScreen} options={{ title: "" }} />
       <Stack.Screen name="VideoDetail" component={VideoDetailScreen} options={{ title: "" }} />

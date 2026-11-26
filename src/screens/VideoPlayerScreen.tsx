@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { useRoute } from "@react-navigation/native";
+import { ActivityIndicator, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ScreenOrientation from "expo-screen-orientation";
 import RNVideo, { OnLoadData, VideoRef } from "react-native-video";
 import { API_HOST, getStoredToken, MEDIA_HEADERS } from "@/api/apiClient";
 import { saveProgress, sendWatchHeartbeat, endPlaybackSession } from "@/api/videos";
@@ -14,6 +16,8 @@ const HEARTBEAT_INTERVAL_MS = 20_000;
 // working end-to-end (pre-roll + mid-roll ad breaks all play correctly).
 export default function VideoPlayerScreen() {
   const route = useRoute<any>();
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const video: Video = route.params.video;
   const playbackSessionToken: string | undefined = route.params.playbackSessionToken;
   // Trailers (e.g. locked Archive content) play the short trailer_playback_url
@@ -66,6 +70,44 @@ export default function VideoPlayerScreen() {
       setAuthToken(token);
     })();
   }, [isTrailer]);
+
+  // The app is portrait-locked in app.json (android:screenOrientation in
+  // the manifest), which is why the video could never be turned sideways.
+  // lockAsync overrides that at runtime for this screen only, and the
+  // activity declares orientation|screenSize in configChanges, so the turn
+  // does NOT recreate it — playback and the watch-segment refs survive.
+  //
+  // LANDSCAPE, not LANDSCAPE_LEFT: both ways round are allowed, so the
+  // phone can be held either way and the picture follows.
+  //
+  // The restore MUST be an explicit PORTRAIT_UP lock, never unlockAsync():
+  // unlocking would leave the activity at UNSPECIFIED and every other
+  // screen in the app would start rotating, which is exactly the
+  // app-wide portrait behaviour we're preserving everywhere else.
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {
+      // An OS that refuses the turn just leaves the video portrait —
+      // still watchable, so there is nothing to tell the viewer.
+    });
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, []);
+
+  // Back was unreachable from here: this screen is registered with
+  // headerShown: false, so there was no header arrow, and with the player
+  // filling the screen the system gesture is easy to miss — the only way
+  // out people found was killing the app. Turning back to portrait before
+  // popping stops the screen underneath appearing sideways for a frame.
+  const handleBack = async () => {
+    try {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    } catch {
+      // Go back regardless — being stuck on the player is far worse than
+      // the previous screen arriving a frame late in the wrong rotation.
+    }
+    navigation.goBack();
+  };
 
   const flushSegment = async () => {
     const start = segmentStartRef.current;
@@ -171,12 +213,27 @@ export default function VideoPlayerScreen() {
     }
   };
 
+  // Shown over every state of this screen, including the two early
+  // returns below — a video that can't load is precisely when you most
+  // need a way out.
+  const backButton = (
+    <TouchableOpacity
+      style={[styles.backButton, { top: insets.top + 12, left: insets.left + 12 }]}
+      onPress={handleBack}
+      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+    >
+      <Text style={styles.backIcon}>‹</Text>
+    </TouchableOpacity>
+  );
+
   if (!sourceUrl) {
     return (
       <View style={styles.center}>
+        <StatusBar hidden />
         <Text style={styles.errorText}>
           {isTrailer ? "Trailer not available" : "Playback URL not available"}
         </Text>
+        {backButton}
       </View>
     );
   }
@@ -187,13 +244,18 @@ export default function VideoPlayerScreen() {
   if (hasAds && authToken === undefined) {
     return (
       <View style={styles.center}>
+        <StatusBar hidden />
         <ActivityIndicator color={COLORS.gold} size="large" />
+        {backButton}
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Nothing but the film: no clock, no battery, no notification icons
+          across the top of a landscape video. */}
+      <StatusBar hidden />
       <RNVideo
         ref={playerRef}
         source={{
@@ -229,6 +291,7 @@ export default function VideoPlayerScreen() {
           <Text style={styles.errorDetail}>{error}</Text>
         </View>
       )}
+      {backButton}
     </View>
   );
 }
@@ -249,5 +312,28 @@ const styles = StyleSheet.create({
   },
   errorText: { color: "#ef4444", textAlign: "center" },
   errorDetail: { color: "#ef4444", opacity: 0.7, fontSize: 11, marginTop: 8, textAlign: "center" },
-  video: { width: "100%", aspectRatio: 16 / 9 },
+  // Fills the (now landscape) screen rather than sitting in a 16:9 letterbox
+  // down the middle of a portrait page. resizeMode="contain" on the player
+  // keeps the picture's own shape inside it, so nothing is cropped or
+  // stretched whatever the video's aspect ratio.
+  video: { flex: 1, width: "100%" },
+  backButton: {
+    position: "absolute",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    // Above the player's own controls, so it stays tappable while they show.
+    zIndex: 10,
+  },
+  backIcon: {
+    color: COLORS.cream,
+    fontSize: 30,
+    lineHeight: 34,
+    // The glyph sits right of centre in the circle without this.
+    marginLeft: -3,
+    fontWeight: "300",
+  },
 });
