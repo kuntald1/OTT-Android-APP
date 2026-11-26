@@ -17,6 +17,13 @@ export interface Blog {
   likes_count: number;
   liked_by_me: boolean;
   comment_count: number;
+  // Review state — "pending" | "published" | "rejected". The public
+  // listing only ever returns published posts, so this matters on
+  // /blogs/mine: it is what the author's own list reads.
+  status?: string;
+  // Why it was turned down, in the editor's words. Only on a rejected
+  // post, and only ever shown to its author.
+  review_note?: string | null;
 }
 
 export interface BlogDetail extends Blog {
@@ -36,6 +43,25 @@ export interface BlogComment {
 // Confirmed: GET /blogs -> array of Blog (list view, no body).
 export async function fetchBlogs(): Promise<Blog[]> {
   const { data } = await apiClient.get<Blog[]>("/blogs");
+  return data;
+}
+
+// A member writes a post. It goes to the admin review queue, never
+// straight live: the server sets status "pending" and takes the byline
+// from the account, ignoring anything sent with the request.
+export async function submitBlog(payload: {
+  title: string;
+  excerpt: string;
+  body: string;
+}): Promise<Blog> {
+  const { data } = await apiClient.post<Blog>("/blogs", payload);
+  return data;
+}
+
+// This person's own submissions, in every state, each with its status
+// and — if it was turned down — the reason.
+export async function fetchMyBlogs(): Promise<Blog[]> {
+  const { data } = await apiClient.get<Blog[]>("/blogs/mine");
   return data;
 }
 

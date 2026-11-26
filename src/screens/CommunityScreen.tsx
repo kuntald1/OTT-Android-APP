@@ -1,23 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
-  Modal,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import {
-  createRoom,
   fetchBlogs,
   fetchCommunityHero,
   fetchCommunityRooms,
+  fetchMyBlogs,
   fetchOrganisers,
   Blog,
   CommunityRoom,
@@ -50,12 +47,13 @@ export default function CommunityScreen() {
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [rooms, setRooms] = useState<CommunityRoom[]>([]);
   const [organisers, setOrganisers] = useState<Organiser[]>([]);
+  // This person's own submissions. Shown above the public list, because
+  // somebody who has just written a post comes back here to find out
+  // what happened to it.
+  const [myBlogs, setMyBlogs] = useState<Blog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createModalVisible, setCreateModalVisible] = useState(false);
-  const [newRoomTitle, setNewRoomTitle] = useState("");
-  const [creatingRoom, setCreatingRoom] = useState(false);
   // The header's magnifier narrows the whole page; each section also has
   // its own box for narrowing just that list. They stack, so a section
   // search never shows something the page search has already ruled out.
@@ -82,6 +80,13 @@ export default function CommunityScreen() {
       setRooms([]);
     }
     try {
+      setMyBlogs(await fetchMyBlogs());
+    } catch {
+      // Logged out, or the endpoint is unreachable — the public list
+      // below still works, so there is nothing to tell anyone.
+      setMyBlogs([]);
+    }
+    try {
       setOrganisers(await fetchOrganisers());
     } catch {
       // The section still works without the preview — its "View all"
@@ -102,25 +107,6 @@ export default function CommunityScreen() {
     setRefreshing(true);
     await load();
     setRefreshing(false);
-  };
-
-  const handleCreateRoom = async () => {
-    if (!newRoomTitle.trim()) return;
-    setCreatingRoom(true);
-    try {
-      const room = await createRoom(newRoomTitle.trim());
-      setRooms((prev) => [room, ...prev]);
-      setNewRoomTitle("");
-      setCreateModalVisible(false);
-      navigation.navigate("RoomDetail", { roomId: room.id, roomTitle: room.title });
-    } catch (e: any) {
-      Alert.alert(
-        "Couldn't create room",
-        e?.response?.data?.detail || "Something went wrong creating that room."
-      );
-    } finally {
-      setCreatingRoom(false);
-    }
   };
 
   const heroImageUrl = resolveMediaUrl(hero?.media?.[0]?.media_url);
@@ -206,6 +192,35 @@ export default function CommunityScreen() {
                 defaultExpanded
                 icon="📝"
               >
+                {/* Anyone with an account can write; the editors decide
+                    what goes up. CreateBlogScreen says so before and
+                    after writing. */}
+                <TouchableOpacity
+                  style={styles.createBlogButton}
+                  onPress={() => navigation.navigate("CreateBlog")}
+                >
+                  <Text style={styles.createBlogText}>✎  Create Blog</Text>
+                </TouchableOpacity>
+
+                {/* Only posts still waiting or turned down — an approved
+                    one is already in the list underneath. */}
+                {myBlogs.filter((b) => b.status && b.status !== "published").map((b) => (
+                  <View key={b.id} style={styles.myPostCard}>
+                    <Text
+                      style={[
+                        styles.myPostBadge,
+                        b.status === "rejected" ? styles.myPostBadgeBad : styles.myPostBadgeWaiting,
+                      ]}
+                    >
+                      {b.status === "rejected" ? "NOT PUBLISHED" : "AWAITING REVIEW"}
+                    </Text>
+                    <Text style={styles.myPostTitle}>{b.title}</Text>
+                    {b.status === "rejected" && !!b.review_note && (
+                      <Text style={styles.myPostNote}>What needs changing: {b.review_note}</Text>
+                    )}
+                  </View>
+                ))}
+
                 <SearchField
                   value={blogQuery}
                   onChangeText={setBlogQuery}
@@ -282,12 +297,11 @@ export default function CommunityScreen() {
                 {viewAllRow(filteredRooms.length, "rooms", () =>
                   navigation.navigate("CommunityList", { kind: "rooms" })
                 )}
-                <TouchableOpacity
-                  style={styles.createRoomButton}
-                  onPress={() => setCreateModalVisible(true)}
-                >
-                  <Text style={styles.createRoomText}>+ Create Room</Text>
-                </TouchableOpacity>
+                {/* Create Room is deliberately gone from the app and the
+                    website (client's call, Nov 2026) — rooms are opened
+                    from the admin panel for now, so members join rather
+                    than start them. Removed rather than disabled: a
+                    dashed card that does nothing reads as broken. */}
               </CollapsibleSection>
 
               {/* Was a single "View Organisers" button, which made you
@@ -372,43 +386,6 @@ export default function CommunityScreen() {
         </ScrollView>
       )}
 
-      <Modal visible={createModalVisible} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Create Room</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Room title"
-              placeholderTextColor="#c9b8b8"
-              value={newRoomTitle}
-              onChangeText={setNewRoomTitle}
-              autoFocus
-            />
-            <View style={styles.modalButtonRow}>
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => {
-                  setCreateModalVisible(false);
-                  setNewRoomTitle("");
-                }}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalCreateButton}
-                onPress={handleCreateRoom}
-                disabled={creatingRoom || !newRoomTitle.trim()}
-              >
-                {creatingRoom ? (
-                  <ActivityIndicator color={COLORS.ctaText} size="small" />
-                ) : (
-                  <Text style={styles.modalCreateText}>Create</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </GradientBackground>
   );
 }
@@ -450,6 +427,29 @@ const styles = StyleSheet.create({
   // Every section opens with its own search box, inset to line up with
   // the cards under it.
   sectionSearch: { marginHorizontal: 16, marginTop: 14, marginBottom: 4 },
+  createBlogButton: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    paddingVertical: 11,
+    borderRadius: 999,
+    backgroundColor: COLORS.gold,
+    alignItems: "center",
+  },
+  createBlogText: { color: COLORS.ctaText, fontSize: 13, fontWeight: "800" },
+  myPostCard: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  myPostBadge: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+  myPostBadgeWaiting: { color: COLORS.gold },
+  myPostBadgeBad: { color: "#f87171" },
+  myPostTitle: { color: COLORS.cream, fontSize: 14, fontWeight: "700", marginTop: 4 },
+  myPostNote: { color: "#f87171", fontSize: 12, marginTop: 6, lineHeight: 17 },
   sectionEmpty: {
     color: COLORS.cream,
     opacity: 0.6,
@@ -518,17 +518,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   joinButtonText: { color: COLORS.gold, fontSize: 12, fontWeight: "700" },
-  createRoomButton: {
-    marginHorizontal: 16,
-    marginTop: 4,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "rgba(212,175,55,0.5)",
-    alignItems: "center",
-  },
-  createRoomText: { color: COLORS.gold, fontSize: 13, fontWeight: "700" },
   organiserIntro: {
     color: COLORS.cream,
     opacity: 0.7,
@@ -538,34 +527,4 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   organiserAvatar: { width: 36, height: 36, borderRadius: 18 },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: COLORS.burgundyDark,
-    borderRadius: 12,
-    padding: 20,
-  },
-  modalTitle: { color: COLORS.cream, fontSize: 17, fontWeight: "700", marginBottom: 14 },
-  modalInput: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    color: COLORS.cream,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-  },
-  modalButtonRow: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 16 },
-  modalCancelButton: { paddingVertical: 10, paddingHorizontal: 14 },
-  modalCancelText: { color: COLORS.cream, opacity: 0.7, fontSize: 14 },
-  modalCreateButton: {
-    backgroundColor: COLORS.gold,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-  },
-  modalCreateText: { color: COLORS.ctaText, fontSize: 14, fontWeight: "700" },
 });

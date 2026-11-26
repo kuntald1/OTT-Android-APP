@@ -13,6 +13,7 @@ import RoomDetailScreen from "@/screens/RoomDetailScreen";
 import TicketDetailScreen from "@/screens/TicketDetailScreen";
 import BlogDetailScreen from "@/screens/BlogDetailScreen";
 import CommunityListScreen from "@/screens/CommunityListScreen";
+import CreateBlogScreen from "@/screens/CreateBlogScreen";
 import VideoDetailScreen from "@/screens/VideoDetailScreen";
 import FilteredVideosScreen from "@/screens/FilteredVideosScreen";
 import StudioProfileScreen from "@/screens/StudioProfileScreen";
@@ -82,6 +83,11 @@ function AppStack() {
       <Stack.Screen name="Organisers" component={OrganisersScreen} options={{ title: "Organisers" }} />
       {/* "View all" from a Community section — the header title says which
           list you landed in, since one screen serves both. */}
+      <Stack.Screen
+        name="CreateBlog"
+        component={CreateBlogScreen}
+        options={{ title: "Write a post" }}
+      />
       <Stack.Screen
         name="CommunityList"
         component={CommunityListScreen}
