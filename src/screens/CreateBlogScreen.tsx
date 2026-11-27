@@ -46,7 +46,7 @@ export default function CreateBlogScreen() {
   // field somebody might type into and overwrite their draft with.
   const [loadingBody, setLoadingBody] = useState(editing);
   const [coverUri, setCoverUri] = useState<string | null>(
-    existing?.cover_image_url ? resolveMediaUrl(existing.cover_image_url) : null
+    existing?.cover_image_url ? resolveMediaUrl(existing.cover_image_url) ?? null : null
   );
   const [coverPicked, setCoverPicked] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [saving, setSaving] = useState(false);
